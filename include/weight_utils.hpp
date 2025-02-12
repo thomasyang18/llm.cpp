@@ -1,7 +1,5 @@
 #pragma once
 #include <Eigen/Dense>
-#include <string>
-#include <vector>
 #include <filesystem>
 
 namespace weight_utils {
