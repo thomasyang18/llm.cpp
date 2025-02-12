@@ -11,7 +11,10 @@ OBJDIR = obj
 BINDIR = bin
 
 # Source files
-SOURCES = $(wildcard $(SRCDIR)/*.cpp)
+SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp))
+
+# $(info $(SOURCES))
+
 OBJECTS = $(SOURCES:%.cpp=$(OBJDIR)/%.o)
 
 # Main target
