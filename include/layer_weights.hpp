@@ -25,8 +25,8 @@ struct MLPWeights {
 };
 
 struct LayerNormWeights {
-    Eigen::VectorXf weight;         // [n_embd]
-    Eigen::VectorXf bias;           // [n_embd]
+    Eigen::VectorXf weight;         // [n_embd] this is gamma. (768, 1)
+    Eigen::VectorXf bias;           // [n_embd] this is beta. (768, 1)
 };
 
 struct TransformerBlockWeights {

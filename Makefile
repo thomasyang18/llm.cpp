@@ -15,8 +15,9 @@ SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp))
 
 # $(info $(SOURCES))
 
-OBJECTS = $(SOURCES:%.cpp=$(OBJDIR)/%.o)
-
+# Jesus christ, makefiels are so ass. 
+# Manually force main.o to be up top jfc.
+OBJECTS = $(OBJDIR)/main.o $(sort $(filter-out $(OBJDIR)/main.o,$(SOURCES:%.cpp=$(OBJDIR)/%.o)))
 # Main target
 TARGET = $(BINDIR)/gpt2_weight_loader
 
@@ -35,7 +36,8 @@ endif
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
+
 
 # Compile source files
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp

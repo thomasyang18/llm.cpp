@@ -75,15 +75,25 @@ int main(int argc, char** argv) {
         ForwardNaive forward_naive(weights);
 
         // Read input tokens
-        int N;
-        std::cout << "Enter the number of tokens: ";
-        std::cin >> N;
 
-        std::vector<int> tokens(N);
-        std::cout << "Enter the tokens: ";
-        for (int i = 0; i < N; ++i) {
-            std::cin >> tokens[i];
-        }
+        // int N;
+        // std::cout << "Enter the number of tokens: ";
+        // std::cin >> N;
+
+        // std::vector<int> tokens(N);
+        // std::cout << "Enter the tokens: ";
+        // for (int i = 0; i < N; ++i) {
+        //     std::cin >> tokens[i];
+        // }
+
+        /*
+            Hardcoded in input tokens for debugging purposes
+        */
+
+        int N = 8;
+        std::vector<int> tokens = {
+            15496, 11, 314, 1101, 257, 3303, 2746, 13
+        };
 
         // Token generation loop
         for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {

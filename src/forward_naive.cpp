@@ -2,6 +2,8 @@
 #include <cmath>
 #include <cassert>
 
+#include <iostream>
+
 ForwardNaive::ForwardNaive(const ModelWeights& model) : _model(model) {}
 
 // Forwards a single stream of tokens, returns a single token.
@@ -196,9 +198,24 @@ Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
 
 // Some nice Eigen code here, but overall nothing too scary. 
 Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
-    Eigen::MatrixXf mean = x.rowwise().mean();
-    Eigen::MatrixXf variance = ((x.array() - mean.array()).square().rowwise().sum() / x.cols()).sqrt();
-    return (x.array() - mean.array()) / variance.array() * ln.weight.array() + ln.bias.array();
+    // Explicitly write this independently, since I'm not that familiar with layernorm... matrix operations scary
+    constexpr float eps = 1e-5;
+
+    auto result = x;
+
+    for (int i = 0; i < x.rows(); ++i) { // iterate over all tokens
+        float mean = x.row(i).mean();
+        float variance = (x.row(i).array() - mean).square().sum() / x.cols(); 
+        auto denom = std::sqrt(variance + eps); 
+
+        // Okay bro I'm just gonna manually implement this for now, Eigen operations just don't make sense
+
+        for (int j = 0; j < x.cols(); ++j) {
+            // The weights and biases for layernorm are stored as [n_ebd, 1] vector; this is just a dot product basically.
+            result(i, j) = (x(i, j) - mean) / denom * ln.weight(j, 0) + ln.bias(j, 0);
+        }
+    }
+    return result;
 }
 
 // aight buddy 
