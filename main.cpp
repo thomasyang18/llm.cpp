@@ -1,4 +1,3 @@
-// main.cpp
 #include "model_weights.hpp"
 #include <iostream>
 #include <chrono>
@@ -24,7 +23,7 @@ int main(int argc, char** argv) {
 
     try {
         auto start_time = std::chrono::high_resolution_clock::now();
-        
+
         // Initialize config with default values
         GPTConfig config;
         std::cout << "Initializing GPT-2 with config:\n"
@@ -36,13 +35,10 @@ int main(int argc, char** argv) {
 
         // Create model weights instance
         ModelWeights weights(config);
-        
+
         // Load weights
         std::cout << "Loading weights from: " << argv[1] << std::endl;
-        if (!weights.load_weights(argv[1])) {
-            std::cerr << "Failed to load weights\n";
-            return 1;
-        }
+        weights.load_weights(argv[1]);
 
         // Print timing information
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -51,7 +47,7 @@ int main(int argc, char** argv) {
 
         // Print some tensor information as verification
         std::cout << "=== Weight Tensor Information ===\n\n";
-        
+
         // Token embeddings
         print_tensor_info("Token embedding (wte)", weights.get_token_embedding());
         print_tensor_info("Position embedding (wpe)", weights.get_position_embedding());
@@ -62,7 +58,7 @@ int main(int argc, char** argv) {
         print_tensor_info("  Attention QKV weights", first_block.attn.c_attn_weight);
         print_tensor_info("  Attention QKV bias", first_block.attn.c_attn_bias);
         print_tensor_info("  MLP fc weights", first_block.mlp.c_fc_weight);
-        
+
         // Final layer norm
         const auto& final_ln = weights.get_final_layer_norm();
         print_tensor_info("Final LayerNorm weight", final_ln.weight);
