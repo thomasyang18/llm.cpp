@@ -1,7 +1,11 @@
 #include "model_weights.hpp"
+#include "forward_naive.hpp"
 #include <iostream>
 #include <chrono>
 #include <iomanip>
+#include <vector>
+
+const int MAX_INFERENCE_TOKENS = 100;
 
 void print_tensor_info(const std::string& name, const Eigen::MatrixXf& tensor) {
     std::cout << name << ": " << tensor.rows() << " x " << tensor.cols() << "\n";
@@ -65,6 +69,40 @@ int main(int argc, char** argv) {
         print_tensor_info("Final LayerNorm bias", final_ln.bias);
 
         std::cout << "All weights loaded successfully!\n";
+
+        // Create ForwardNaive instance
+        ForwardNaive forward_naive(weights);
+
+        // Read input tokens
+        int N;
+        std::cout << "Enter the number of tokens: ";
+        std::cin >> N;
+
+        std::vector<int> tokens(N);
+        std::cout << "Enter the tokens: ";
+        for (int i = 0; i < N; ++i) {
+            std::cin >> tokens[i];
+        }
+
+        // Token generation loop
+        for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
+            int next_token = forward_naive.forward(tokens);
+            tokens.push_back(next_token);
+            if (next_token == 50256) { // EOT token
+                break;
+            }
+        }
+
+        // Print resulting token array
+        std::cout << "Resulting token array: [";
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            std::cout << tokens[i];
+            if (i < tokens.size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "]\n";
+
         return 0;
 
     } catch (const std::exception& e) {
