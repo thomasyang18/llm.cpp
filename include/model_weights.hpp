@@ -17,7 +17,7 @@ public:
     const std::vector<TransformerBlockWeights>& blocks() const { return _h; }
     const LayerNormWeights& ln_f() const { return _ln_f; }
 
-    // weight tying 
+    // weight tying
     const Eigen::MatrixXf& lm_head() const {return _wte; }
 
     const GPTConfig config() const {return _config; }
@@ -36,7 +36,7 @@ private:
     LayerNormWeights _ln_f;
 
     // Helper methods for loading specific components
-    void load_embeddings();
-    void load_transformer_block(int layer_idx);
-    void load_final_layer_norm();
+    void load_embeddings(const std::string& dir_path);
+    void load_transformer_block(int layer_idx, const std::string& dir_path);
+    void load_final_layer_norm(const std::string& dir_path);
 };

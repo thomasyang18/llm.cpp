@@ -8,24 +8,22 @@ ModelWeights::ModelWeights(const GPTConfig& config) : _config(config) {
 }
 
 void ModelWeights::load_weights(const std::string& dir_path) {
-    _config.weights_path = dir_path;
-
-    load_embeddings();
+    load_embeddings(dir_path);
 
     for (int i = 0; i < _config.n_layer; i++) {
-        load_transformer_block(i);
+        load_transformer_block(i, dir_path);
     }
 
-    load_final_layer_norm();
+    load_final_layer_norm(dir_path);
 }
 
-void ModelWeights::load_embeddings() {
+void ModelWeights::load_embeddings(const std::string& dir_path) {
     try {
         _wte = weight_utils::load_2d_tensor(
-            fs::path(_config.weights_path) / "transformer.wte.weight.npy"
+            fs::path(dir_path) / "transformer.wte.weight.npy"
         );
         _wpe = weight_utils::load_2d_tensor(
-            fs::path(_config.weights_path) / "transformer.wpe.weight.npy"
+            fs::path(dir_path) / "transformer.wpe.weight.npy"
         );
 
         if (!weight_utils::verify_tensor_shape(_wte, _config.vocab_size, _config.n_embd)) {
@@ -48,9 +46,9 @@ std::filesystem::path operator+(std::filesystem::path path, T&& data)
     return path;
 }
 
-void ModelWeights::load_transformer_block(int layer_idx) {
+void ModelWeights::load_transformer_block(int layer_idx, const std::string& dir_path) {
     try {
-        auto base_path = fs::path(_config.weights_path) / "transformer.h.";
+        auto base_path = fs::path(dir_path) / "transformer.h.";
         base_path += std::to_string(layer_idx);
         auto& block = _h[layer_idx];
 
@@ -100,13 +98,13 @@ void ModelWeights::load_transformer_block(int layer_idx) {
     }
 }
 
-void ModelWeights::load_final_layer_norm() {
+void ModelWeights::load_final_layer_norm(const std::string& dir_path) {
     try {
         _ln_f.weight = weight_utils::load_1d_tensor(
-            fs::path(_config.weights_path) / "transformer.ln_f.weight.npy"
+            fs::path(dir_path) / "transformer.ln_f.weight.npy"
         );
         _ln_f.bias = weight_utils::load_1d_tensor(
-            fs::path(_config.weights_path) / "transformer.ln_f.bias.npy"
+            fs::path(dir_path) / "transformer.ln_f.bias.npy"
         );
 
         if (!weight_utils::verify_tensor_shape(_ln_f.weight, _config.n_embd)) {
