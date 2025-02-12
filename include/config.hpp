@@ -10,9 +10,8 @@ struct GPTConfig {
     int n_embd = 768;
 
     GPTConfig() {
-        assert(n_embd % n_head == 0); 
-        // actual number of embeddings is n_embd/n_head, but GPT batches them since 
+        assert(n_embd % n_head == 0);
+        // actual number of embeddings is n_embd/n_head, but GPT batches them since
         // they're mostly independent until attention
     }
 };
-
