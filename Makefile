@@ -23,13 +23,10 @@ $(shell mkdir -p $(OBJDIR)/src $(BINDIR))
 # Default build type
 BUILD_TYPE ?= release
 
-# Optimization level
-OPTIMIZATION ?= 3
-
 ifeq ($(BUILD_TYPE), debug)
     CXXFLAGS += -O0 -DDEBUG -g
 else
-    CXXFLAGS += -O$(OPTIMIZATION) -DRELEASE
+    CXXFLAGS += -O3 -DRELEASE
 endif
 
 all: $(TARGET)
