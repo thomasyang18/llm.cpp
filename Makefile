@@ -2,7 +2,8 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
-CNPY_LIB = -lcnpy
+CNPY_LIB_DIR = "/usr/local/lib"
+CNPY_LIB = -L$(CNPY_LIB_DIR) -lcnpy
 ZLIB = -lz
 
 SRCDIR = src
