@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iomanip>
 #include <vector>
+#include <filesystem>
 
 const int MAX_INFERENCE_TOKENS = 100;
 

@@ -3,13 +3,14 @@
 #include "layer_weights.hpp"
 #include <vector>
 #include <stdexcept>
+#include <filesystem>
 
 class ModelWeights {
 public:
     explicit ModelWeights(const GPTConfig& config);
 
     // Load all weights from directory
-    void load_weights(const std::string& dir_path);
+    void load_weights(const std::filesystem::path& dir_path);
 
     // Getters for different components
     const Eigen::MatrixXf& wte() const { return _wte; }
@@ -36,7 +37,7 @@ private:
     LayerNormWeights _ln_f;
 
     // Helper methods for loading specific components
-    void load_embeddings(const std::string& dir_path);
-    void load_transformer_block(int layer_idx, const std::string& dir_path);
-    void load_final_layer_norm(const std::string& dir_path);
+    void load_embeddings(const std::filesystem::path& dir_path);
+    void load_transformer_block(int layer_idx, const std::filesystem::path& dir_path);
+    void load_final_layer_norm(const std::filesystem::path& dir_path);
 };

@@ -7,7 +7,7 @@ ModelWeights::ModelWeights(const GPTConfig& config) : _config(config) {
     _h.resize(config.n_layer);
 }
 
-void ModelWeights::load_weights(const std::filesystem::path& dir_path) {
+void ModelWeights::load_weights(const fs::path& dir_path) {
     load_embeddings(dir_path);
 
     for (int i = 0; i < _config.n_layer; i++) {
@@ -17,7 +17,7 @@ void ModelWeights::load_weights(const std::filesystem::path& dir_path) {
     load_final_layer_norm(dir_path);
 }
 
-void ModelWeights::load_embeddings(const std::filesystem::path& dir_path) {
+void ModelWeights::load_embeddings(const fs::path& dir_path) {
     try {
         _wte = weight_utils::load_2d_tensor(
             dir_path / "transformer.wte.weight.npy"
@@ -39,14 +39,14 @@ void ModelWeights::load_embeddings(const std::filesystem::path& dir_path) {
 
 // internal hack to make this this nicer...
 template <typename T>
-std::filesystem::path operator+(std::filesystem::path path, T&& data)
+fs::path operator+(fs::path path, T&& data)
 // (accepting by value, we're going to modify!)
 {
     path += std::forward<T>(data);
     return path;
 }
 
-void ModelWeights::load_transformer_block(int layer_idx, const std::filesystem::path& dir_path) {
+void ModelWeights::load_transformer_block(int layer_idx, const fs::path& dir_path) {
     try {
         auto base_path = dir_path / "transformer.h.";
         base_path += std::to_string(layer_idx);
@@ -98,7 +98,7 @@ void ModelWeights::load_transformer_block(int layer_idx, const std::filesystem::
     }
 }
 
-void ModelWeights::load_final_layer_norm(const std::filesystem::path& dir_path) {
+void ModelWeights::load_final_layer_norm(const fs::path& dir_path) {
     try {
         _ln_f.weight = weight_utils::load_1d_tensor(
             dir_path / "transformer.ln_f.weight.npy"
