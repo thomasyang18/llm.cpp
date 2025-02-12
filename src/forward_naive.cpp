@@ -77,7 +77,7 @@ int ForwardNaive::forward(std::vector<int> tokens) {
         // Before start of transformer block...
         assert(assert_not_nan(x) && "Before transfomer block");
 
-        x = x + causal_self_attention(layer_norm(x, block.ln_1), block.attn, tokens.size());
+        x = x + causal_self_attention(layer_norm(x, block.ln_1), block.attn);
 
         assert(assert_not_nan(x) && "Right after attention block...");
 
@@ -152,7 +152,16 @@ Oh wait, nvm. I see.
     Then you just do standard MM on (x, y) (y, z).
 */
 
-Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn, std::optional<size_t> seq_length ) {
+
+// And today I learned that all vectors in Eigen are column vectors, not row vectors.
+
+Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
+    Eigen::MatrixXf result = x * linear.weight;
+    result.rowwise() += linear.bias;
+    return result;
+};
+
+Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
     int T = x.rows();
     int C = x.cols();
@@ -163,9 +172,9 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     // 1. Compute qkv: project x with weight and add bias.
     //    attn.c_attn_weight should have shape [C, 3*C] and attn.c_attn_bias shape [3*C].
     //    The result qkv is of shape [T, 3*C].
-    Eigen::MatrixXf qkv = x * attn.c_attn_weight.transpose();
-    for (int i = 0; i < T; i++) qkv.row(i) += attn.c_attn_bias; // broadcast bias vector to every single projected token 
-    
+
+    auto qkv = forward_linear(x, attn.qkv);
+
     // 2. Split qkv into q, k, v. Each will have shape [T, C].
     Eigen::MatrixXf q = qkv.leftCols(C);
     Eigen::MatrixXf k = qkv.middleCols(C, C);
@@ -174,9 +183,6 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     // 3. Prepare an output accumulator for all heads.
     Eigen::MatrixXf y(T, C);
     y.setZero();
-
-    // Determine the sequence length to use for masking
-    size_t max_seq_length = seq_length.value_or(T); // Use seq_length if specified, otherwise use T.
 
     assert(assert_not_nan(q) && " q matrix");
     assert(assert_not_nan(k) && " k matrix");
@@ -235,11 +241,8 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     //     attn.c_proj_weight should have shape [C, C] and attn.c_proj_bias shape [C].
 
     // I'm not sure if I should transpose here, actually, the attention matrices are all weird and funky bro. 
-    y = y * attn.c_proj_weight.transpose();
-    
-    // broadcast
-    for (int i = 0; i < T; ++i) y.row(i) += attn.c_proj_bias;
 
+    y = forward_linear(y, attn.c_proj);
     return y;
 }
 
@@ -267,38 +270,15 @@ We are here, we just add an extra row dimension, and everything works out :)
 
 Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
     // x is our sequence of context-augmented tokens. 
-
-    assert(assert_not_nan(x) && "Before MLP");
-
-    Eigen::MatrixXf x1 = x * mlp.c_fc_weight.transpose();
-    // broadcast. Really need to figure out these broadcasting operators huh. 
-    // to avoid these hacks...
-
-    assert(mlp.c_fc_bias.transpose().cols() == x1.cols());
-
-    assert(assert_not_nan(x) && "After first mult");
-
-    for (int i = 0; i < x.rows(); ++i) x1.row(i) += mlp.c_fc_bias.transpose().row(0);  
-
-    assert(assert_not_nan(x) && "After first bias");
-
-    x1 = gelu(x1);
-
-    x1 = x1 * mlp.c_proj_weight.transpose();
-
-    assert(assert_not_nan(x) && "After second mult");
-
-    for (int i = 0; i < x.rows(); ++i) x1.row(i) += mlp.c_proj_bias.transpose().row(0);  
-
-    assert(assert_not_nan(x) && "After second bias");
-    
-    return x1;
+    x = forward_linear(x, mlp.to_up);
+    x = gelu(x);
+    x = forward_linear(x, mlp.back_down);
+    return x;
 }
 
 // Some nice Eigen code here, but overall nothing too scary. 
 Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
     // Explicitly write this independently, since I'm not that familiar with layernorm... matrix operations scary
-
 
     // sanity check that before layernorm, my program is sane.
     assert(assert_not_nan(x) && "Before layernorm");
@@ -316,7 +296,7 @@ Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeigh
 
         for (int j = 0; j < x.cols(); ++j) {
             // The weights and biases for layernorm are stored as [n_ebd, 1] vector; this is just a dot product basically.
-            result(i, j) = (x(i, j) - mean) / denom * ln.weight(j, 0) + ln.bias(j, 0);
+            result(i, j) = (x(i, j) - mean) / denom * ln.gamma(j, 0) + ln.beta(j, 0);
         }
     }   
     // sanity check that my layernorm didn't kill the program

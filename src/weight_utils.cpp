@@ -16,11 +16,23 @@ namespace weight_utils {
         );
     }
 
-    bool verify_tensor_shape(const Eigen::MatrixXf& tensor, int rows, int cols) {
-        return tensor.rows() == rows && tensor.cols() == cols;
+    void assert_tensor_shape(const Eigen::MatrixXf& tensor, int rows, int cols, std::string tensor_name) {
+        if (tensor.rows() != rows || tensor.cols() != cols) {
+            std::ostringstream oss;
+            oss << "Tensor shape mismatch for '" << tensor_name << "'.\n";
+            oss << "Expected dimensions [" << rows << ", " << cols << "]\n";
+            oss << "Got dimensions [" << tensor.rows() << ", " << tensor.cols() << "]\n";
+            throw std::runtime_error(oss.str());
+        }
     }
 
-    bool verify_tensor_shape(const Eigen::VectorXf& tensor, int size) {
-        return tensor.size() == size;
+    void assert_vector_shape(const Eigen::VectorXf& vector, int size, std::string vector_name) {
+        if (vector.size() != size) {
+            std::ostringstream oss;
+            oss << "vector shape mismatch for '" << vector_name << "'.\n";
+            oss << "Expected dimensions [" << size << "]\n";
+            oss << "Got dimensions [" << vector.size() << "]\n";
+            throw std::runtime_error(oss.str());
+        }
     }
 }
