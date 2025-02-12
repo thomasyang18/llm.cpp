@@ -12,6 +12,13 @@ state_dict = model.state_dict()
 # Ignore these buffers
 ignored_keys = {k for k in state_dict if k.endswith(('.attn.bias', '.attn.masked_bias'))}
 
+# What the fuck? Why did karpathy even do this? 
+# The original attention mechanism makes so much more sense, jesus fucking christ.
+# The issue with ML is that, there *is* an intuitive sense for what these matrices are doing, 
+# but nobody actually bothers to explain what's going on. 
+# Maybe I'm just a stupid slow kid? Like jesus christ.
+# This is just horrible, horrible, un-intuitive data munging. 
+
 # Layers that need transposition (Conv1D to Linear)
 transposed_layers = {"attn.c_attn.weight", "attn.c_proj.weight", "mlp.c_fc.weight", "mlp.c_proj.weight"}
 

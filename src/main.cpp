@@ -99,6 +99,7 @@ int main(int argc, char** argv) {
         for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
             if (tokens.size() > weights.config().block_size) tokens.erase(tokens.begin());
             int next_token = forward_naive.forward(tokens);
+            std::cerr << " ADDING TOKEN " << next_token << std::endl;
             tokens.push_back(next_token);
             if (next_token == 50256) { // EOT token
                 break;

@@ -6,6 +6,8 @@
 
 struct AttentionWeights {
     // Combined QKV weights and bias
+    // Recall that these were transposed from the original documentation (so they do not need to be transposed in the code).
+
     Eigen::MatrixXf c_attn_weight;  // [n_embd, 3 * n_embd]
     Eigen::VectorXf c_attn_bias;    // [3 * n_embd]
     
@@ -25,6 +27,9 @@ struct MLPWeights {
 };
 
 struct LayerNormWeights {
+    // Recall that these were transposed from the original documentaiton.
+    // (although we just manually implemented this lol...)
+
     Eigen::VectorXf weight;         // [n_embd] this is gamma. (768, 1)
     Eigen::VectorXf bias;           // [n_embd] this is beta. (768, 1)
 };
