@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -Wall -Wextra
+CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
 # You might need to adjust these paths for your system
@@ -19,6 +19,18 @@ TARGET = $(BINDIR)/gpt2_weight_loader
 
 # Create directories
 $(shell mkdir -p $(OBJDIR)/src $(BINDIR))
+
+# Default build type
+BUILD_TYPE ?= release
+
+# Optimization level
+OPTIMIZATION ?= 3
+
+ifeq ($(BUILD_TYPE), debug)
+    CXXFLAGS += -O0 -DDEBUG -g
+else
+    CXXFLAGS += -O$(OPTIMIZATION) -DRELEASE
+endif
 
 all: $(TARGET)
 
