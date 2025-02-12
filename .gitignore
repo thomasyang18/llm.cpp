@@ -1,0 +1,8 @@
+dev/model_weights/*
+dev/model_weights.zip
+
+obj/*
+bin/*
+
+.aider*
+.vscode*
