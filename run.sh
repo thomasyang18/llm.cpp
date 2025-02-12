@@ -4,7 +4,10 @@
 # Make script executable with: chmod +x run.sh
 
 # Directory containing cnpy library - adjust these paths as needed
-CNPY_LIB_DIR="$HOME/local/lib"
+# We load this at runtime, I guess? I mean like, its such a small library that it prolly doesn't matter.
+
+
+CNPY_LIB_DIR="/usr/local/lib"
 EIGEN_INCLUDE_DIR="/usr/local/include/eigen3"
 
 # Build the project with library path

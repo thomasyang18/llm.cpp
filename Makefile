@@ -2,7 +2,6 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
-# You might need to adjust these paths for your system
 CNPY_LIB = -lcnpy
 ZLIB = -lz
 
