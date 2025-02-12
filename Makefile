@@ -41,6 +41,12 @@ $(TARGET): $(OBJECTS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+# Dependency tracking
+$(OBJDIR)/%.d: $(SRCDIR)/%.cpp
+	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< > $@
+
+-include $(OBJDIR)/*.d
+
 clean:
 	rm -rf $(OBJDIR)/* $(TARGET)
 
