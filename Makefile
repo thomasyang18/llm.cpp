@@ -11,14 +11,14 @@ OBJDIR = obj
 BINDIR = bin
 
 # Source files
-SOURCES = $(wildcard $(SRCDIR)/*.cpp) main.cpp
+SOURCES = $(wildcard $(SRCDIR)/*.cpp)
 OBJECTS = $(SOURCES:%.cpp=$(OBJDIR)/%.o)
 
 # Main target
 TARGET = $(BINDIR)/gpt2_weight_loader
 
 # Create directories
-$(shell mkdir -p $(OBJDIR)/src $(BINDIR))
+$(shell mkdir -p $(OBJDIR) $(BINDIR))
 
 # Default build type
 BUILD_TYPE ?= release
@@ -34,12 +34,8 @@ all: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
 
-# Compile main.cpp
-$(OBJDIR)/main.o: main.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
-
 # Compile source files
-$(OBJDIR)/src/%.o: $(SRCDIR)/%.cpp
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
