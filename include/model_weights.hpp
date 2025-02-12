@@ -12,23 +12,23 @@ public:
     void load_weights(const std::string& dir_path);
 
     // Getters for different components
-    const Eigen::MatrixXf& get_token_embedding() const { return wte; }
-    const Eigen::MatrixXf& get_position_embedding() const { return wpe; }
-    const std::vector<TransformerBlockWeights>& get_transformer_blocks() const { return h; }
-    const LayerNormWeights& get_final_layer_norm() const { return ln_f; }
+    const Eigen::MatrixXf& wte() const { return _wte; }
+    const Eigen::MatrixXf& wpe() const { return _wpe; }
+    const std::vector<TransformerBlockWeights>& blocks() const { return _h; }
+    const LayerNormWeights& ln_f() const { return _ln_f; }
 
 private:
-    GPTConfig config;
+    GPTConfig _config;
 
     // Token and position embeddings
-    Eigen::MatrixXf wte;    // [vocab_size, n_embd]
-    Eigen::MatrixXf wpe;    // [block_size, n_embd]
+    Eigen::MatrixXf _wte;    // [vocab_size, n_embd]
+    Eigen::MatrixXf _wpe;    // [block_size, n_embd]
 
     // Transformer blocks
-    std::vector<TransformerBlockWeights> h;
+    std::vector<TransformerBlockWeights> _h;
 
     // Final layer norm
-    LayerNormWeights ln_f;
+    LayerNormWeights _ln_f;
 
     // Helper methods for loading specific components
     void load_embeddings();
