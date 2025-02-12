@@ -39,51 +39,61 @@ void ModelWeights::load_embeddings() {
     }
 }
 
+// internal hack to make this this nicer...
+template <typename T>
+std::filesystem::path operator+(std::filesystem::path path, T&& data)
+// (accepting by value, we're going to modify!)
+{
+    path += std::forward<T>(data);
+    return path;
+}
+
 void ModelWeights::load_transformer_block(int layer_idx) {
     try {
-        auto base_path = fs::path(config.weights_path) / "transformer.h." / std::to_string(layer_idx);
+        auto base_path = fs::path(config.weights_path) / "transformer.h.";
+        base_path += std::to_string(layer_idx);
         auto& block = h[layer_idx];
 
         // Load attention weights
         block.attn.c_attn_weight = weight_utils::load_2d_tensor(
-            base_path / "attn.c_attn.weight.npy"
+            base_path + ".attn.c_attn.weight.npy"
         );
         block.attn.c_attn_bias = weight_utils::load_1d_tensor(
-            base_path / "attn.c_attn.bias.npy"
+            base_path + ".attn.c_attn.bias.npy"
         );
         block.attn.c_proj_weight = weight_utils::load_2d_tensor(
-            base_path / "attn.c_proj.weight.npy"
+            base_path + ".attn.c_proj.weight.npy"
         );
         block.attn.c_proj_bias = weight_utils::load_1d_tensor(
-            base_path / "attn.c_proj.bias.npy"
+            base_path + ".attn.c_proj.bias.npy"
         );
 
         // Load MLP weights
         block.mlp.c_fc_weight = weight_utils::load_2d_tensor(
-            base_path / "mlp.c_fc.weight.npy"
+            base_path + ".mlp.c_fc.weight.npy"
         );
         block.mlp.c_fc_bias = weight_utils::load_1d_tensor(
-            base_path / "mlp.c_fc.bias.npy"
+            base_path + ".mlp.c_fc.bias.npy"
         );
         block.mlp.c_proj_weight = weight_utils::load_2d_tensor(
-            base_path / "mlp.c_proj.weight.npy"
+            base_path + ".mlp.c_proj.weight.npy"
         );
         block.mlp.c_proj_bias = weight_utils::load_1d_tensor(
-            base_path / "mlp.c_proj.bias.npy"
+            base_path + ".mlp.c_proj.bias.npy"
         );
 
         // Load layer norm weights
         block.ln_1.weight = weight_utils::load_1d_tensor(
-            base_path / "ln_1.weight.npy"
+            base_path + ".ln_1.weight.npy"
         );
         block.ln_1.bias = weight_utils::load_1d_tensor(
-            base_path / "ln_1.bias.npy"
+            base_path + ".ln_1.bias.npy"
         );
         block.ln_2.weight = weight_utils::load_1d_tensor(
-            base_path / "ln_2.weight.npy"
+            base_path + ".ln_2.weight.npy"
         );
         block.ln_2.bias = weight_utils::load_1d_tensor(
-            base_path / "ln_2.bias.npy"
+            base_path + ".ln_2.bias.npy"
         );
     } catch (const std::exception& e) {
         throw std::runtime_error("Failed to load transformer block " + std::to_string(layer_idx) + ": " + std::string(e.what()));

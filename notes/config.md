@@ -14,3 +14,4 @@ class GPTConfig:
 
 We use [cnpy](https://github.com/rogersce/cnpy) to serialize/parse stuff. 
 
+The weights are all float32.

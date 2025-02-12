@@ -39,10 +39,7 @@ int main(int argc, char** argv) {
         
         // Load weights
         std::cout << "Loading weights from: " << argv[1] << std::endl;
-        if (!weights.load_weights(argv[1])) {
-            std::cerr << "Failed to load weights\n";
-            return 1;
-        }
+        weights.load_weights(argv[1]);
 
         // Print timing information
         auto end_time = std::chrono::high_resolution_clock::now();

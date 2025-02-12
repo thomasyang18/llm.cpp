@@ -2,6 +2,10 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
+# You might need to adjust these paths for your system
+CNPY_LIB = -lcnpy
+ZLIB = -lz
+
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
@@ -28,7 +32,7 @@ endif
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(OBJECTS) -o $@ -lz -lncpy
+	$(CXX) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
 
 # Compile main.cpp
 $(OBJDIR)/main.o: main.cpp
