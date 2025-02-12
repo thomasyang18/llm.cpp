@@ -16,7 +16,7 @@ bool assert_not_nan(T container) {
     }
 #endif
     return true;
-};
+}
 
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
@@ -168,7 +168,7 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     Eigen::MatrixXf result = x * linear.weight;
     result.rowwise() += linear.bias;
     return result;
-};
+}
 
 Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
