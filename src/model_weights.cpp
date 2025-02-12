@@ -95,6 +95,10 @@ void ModelWeights::load_transformer_block(int layer_idx, const fs::path& dir_pat
         // ===TRANSPOSED===
         // "attn.c_proj.weight"
 
+        /*
+            This is the only one I'm not sure about, but it immidiately broke and started printing "42067" over and over
+            when I uncommented it out. So chances are this ain't it chief.
+        */
         // block.attn.c_proj.weight.transposeInPlace();
 
         assert_linear(block.attn.c_proj, config().n_embd, config().n_embd, "post-attention linear soup #" + std::to_string(layer_idx));

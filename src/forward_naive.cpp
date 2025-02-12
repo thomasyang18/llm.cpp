@@ -7,21 +7,24 @@
 
 template<typename T> 
 bool assert_not_nan(T container) {
+#ifdef DEBUG 
     for (int i = 0; i < container.rows(); ++i) {
         for (int j = 0; j < container.cols(); ++j) {
             if (container(i, j) != container(i, j)) return false;
         }
     }
+#endif
     return true;
 };
 
 
+Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
+    Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
+    return exp_logits / exp_logits.sum();
+}
+
 namespace sampling {
 
-    Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
-        Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
-        return exp_logits / exp_logits.sum();
-    }
 
     int top_k_sample(const Eigen::RowVectorXf& logits, int k) {
         // Step 1: Apply softmax
@@ -219,12 +222,7 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
         // 7. Apply softmax to each row of att_h.
         //    For numerical stability, subtract the max in each row before exponentiating.
         for (int i = 0; i < T; i++) {
-            float row_max = att_h.row(i).maxCoeff();
-            // Compute exponentials
-            Eigen::VectorXf exp_row = (att_h.row(i).array() - row_max).exp();
-            float sum_exp = exp_row.sum();
-            // Replace the row with the normalized softmax values
-            att_h.row(i) = exp_row.transpose() / sum_exp;
+            att_h.row(i) = softmax(att_h.row(i));
         }
 
         // 8. Compute the weighted sum of the values: out_h = att_h * v_h.
