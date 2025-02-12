@@ -17,8 +17,13 @@ public:
     const std::vector<TransformerBlockWeights>& blocks() const { return _h; }
     const LayerNormWeights& ln_f() const { return _ln_f; }
 
+    // weight tying 
+    const Eigen::MatrixXf& lm_head() const {return _wte; }
+
+    const GPTConfig config() const {return _config; }
+
 private:
-    GPTConfig _config;
+    const GPTConfig _config;
 
     // Token and position embeddings
     Eigen::MatrixXf _wte;    // [vocab_size, n_embd]

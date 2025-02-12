@@ -1,6 +1,9 @@
 #pragma once
 #include <Eigen/Dense>
 
+// For now, we just want to work in raw weights.
+// Because in the future, we might write *cracked* passes!
+
 struct AttentionWeights {
     // Combined QKV weights and bias
     Eigen::MatrixXf c_attn_weight;  // [n_embd, 3 * n_embd]
