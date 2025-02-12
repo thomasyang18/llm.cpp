@@ -2,10 +2,6 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
-CNPY_LIB_DIR = "/usr/local/lib"
-CNPY_LIB = -L$(CNPY_LIB_DIR) -lcnpy
-ZLIB = -lz
-
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
@@ -32,7 +28,7 @@ endif
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
+	$(CXX) $(OBJECTS) -o $@ -lz -lncpy
 
 # Compile main.cpp
 $(OBJDIR)/main.o: main.cpp

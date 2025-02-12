@@ -6,7 +6,7 @@
 # Directory containing cnpy library - adjust these paths as needed
 # We load this at runtime, I guess? I mean like, its such a small library that it prolly doesn't matter.
 
-# Shortcut: LD_LIBRARY_PATH="$CNPY_LIB_DIR:$LD_LIBRARY_PATH"
+# Shortcut: LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 
 CNPY_LIB_DIR="/usr/local/lib"
 
