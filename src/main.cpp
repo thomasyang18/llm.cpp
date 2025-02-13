@@ -1,4 +1,5 @@
-#include "kernel_fusion_forward.hpp"
+#include "kv_caching_forward.hpp"
+// #include "kernel_fusion_forward.hpp"
 // #include "reference/forward_naive.hpp"
 #include <iostream>
 #include <chrono>
@@ -82,8 +83,9 @@ int main(int argc, char** argv) {
 
 
         // Create ForwardNaive instance
-        KernelFusionForwarder 
+        // KernelFusionForwarder 
         // ForwardNaive
+        KVCachingForwarder
             forward_naive(weights);
 
         // Read input tokens
@@ -107,6 +109,10 @@ int main(int argc, char** argv) {
             15496, 11, 314, 1101, 257, 3303, 2746, 13
         };
 
+        tokens = forward_naive.forward_until(tokens, 50);
+
+        /*
+
         // Token generation loop
         for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
             if (tokens.size() > weights.config().block_size) tokens.erase(tokens.begin());
@@ -129,6 +135,7 @@ int main(int argc, char** argv) {
                 break;
             }
         }
+        */
 
         // Print resulting token array
         std::cout << "Resulting token array: [";
@@ -139,6 +146,8 @@ int main(int argc, char** argv) {
             }
         }
         std::cout << "]\n";
+
+        
 
         return 0;
 
