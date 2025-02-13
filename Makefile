@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
-# You might need to adjust these paths for your system
+# Libraries
 CNPY_LIB = -lcnpy
 ZLIB = -lz
 
@@ -10,46 +10,52 @@ SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
 
-# Source files
-SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp))
+# Recursively find all .cpp files in $(SRCDIR)
+SOURCES := $(shell find $(SRCDIR) -type f -name '*.cpp')
 
-# $(info $(SOURCES))
+# Convert sources to corresponding object files in $(OBJDIR)
+# This preserves the directory structure, e.g. src/foo/bar.cpp becomes obj/foo/bar.o
+OBJECTS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SOURCES))
 
-# Jesus christ, makefiels are so ass. 
-# Manually force main.o to be up top jfc.
-OBJECTS = $(OBJDIR)/main.o $(sort $(filter-out $(OBJDIR)/main.o,$(SOURCES:%.cpp=$(OBJDIR)/%.o)))
+# If main.o exists, force it to the front of the object list.
+OBJECTS := $(if $(filter $(OBJDIR)/main.o,$(OBJECTS)), \
+             $(OBJDIR)/main.o $(filter-out $(OBJDIR)/main.o,$(OBJECTS)), \
+             $(OBJECTS))
+
 # Main target
 TARGET = $(BINDIR)/gpt2_weight_loader
 
-# Create directories
-$(shell mkdir -p $(OBJDIR) $(BINDIR))
-
 # Default build type
 BUILD_TYPE ?= release
-
 ifeq ($(BUILD_TYPE), debug)
     CXXFLAGS += -O0 -DDEBUG -g
 else
     CXXFLAGS += -O3 -DRELEASE
 endif
 
+# Ensure top-level directories exist
+$(shell mkdir -p $(OBJDIR) $(BINDIR))
+
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
 
-
-# Compile source files
+# Rule to compile .cpp files into .o files.
+# The command first ensures that the target directory exists.
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Dependency tracking
+# Dependency tracking: generate .d files alongside .o files.
 $(OBJDIR)/%.d: $(SRCDIR)/%.cpp
-	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< > $@
+	@mkdir -p $(dir $@)
+	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< -o $@
 
--include $(OBJDIR)/*.d
+# Include all dependency files (if they exist)
+-include $(OBJECTS:.o=.d)
 
 clean:
-	rm -rf $(OBJDIR)/* $(TARGET)
+	rm -rf $(OBJDIR) $(TARGET)
 
 .PHONY: all clean

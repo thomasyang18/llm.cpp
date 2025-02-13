@@ -1,5 +1,5 @@
-#include "model_weights.hpp"
-#include "forward_naive.hpp"
+#include "utils/model_weights.hpp"
+#include "reference/forward_naive.hpp"
 #include <iostream>
 #include <chrono>
 #include <iomanip>
