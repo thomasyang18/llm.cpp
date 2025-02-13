@@ -4,6 +4,11 @@
 #include <numeric>
 #include <random>
 
+
+#include <queue>
+#include <utility>
+
+
 #include <iostream>
 
 Forwarder::Forwarder(const ModelWeights& model) : _model(model) {}
@@ -49,3 +54,38 @@ namespace {
 }
 
 Eigen::MatrixXf Forwarder::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
+
+int Forwarder::sampler(Eigen::RowVectorXf logits) {
+    // Multiply the last token's state with the transposed lm_head to get the logits.
+    logits = softmax(logits);    
+    
+    // slightly more memory efficient (i think?) implementation of sampling than before
+    std::priority_queue<std::pair<float, int>> lowest;
+    std::vector<std::pair<float, int>> highest;
+
+    const int THRESH = 10;
+    for (int i = 0; i < model().config().vocab_size; ++i) {
+        lowest.emplace(-logits[i], i); 
+        while (lowest.size() > THRESH) lowest.pop();
+    }
+
+    float cumsum = 0; // maintains the total probabilities
+    highest.resize(lowest.size());
+    for (int i = int(highest.size()) - 1; i >= 0; --i) {
+        highest[i] = lowest.top(); lowest.pop();
+        highest[i].first = -highest[i].first;
+        cumsum += highest[i].first;
+    } 
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dist(0.0f, cumsum);
+    float rand_value = dist(gen);
+
+    int last = 0;
+    for (auto [prob, token]: highest) {
+        last = token; 
+        if ((rand_value -= prob) < 0) break;
+    }
+    return last;
+}

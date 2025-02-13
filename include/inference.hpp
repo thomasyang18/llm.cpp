@@ -27,11 +27,12 @@ public:
     Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear);
     Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& x);
 
+    int sampler(Eigen::RowVectorXf logits);
+
     // These don't really change at all; these are not the bottleneck, ever. 
     Eigen::MatrixXf mlp(Eigen::MatrixXf x, const MLPWeights& mlp);
     Eigen::MatrixXf layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln);
     Eigen::MatrixXf gelu(Eigen::MatrixXf x);
-
 private:
     const ModelWeights& _model;
 };

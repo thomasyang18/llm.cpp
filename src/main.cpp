@@ -1,5 +1,5 @@
-#include "utils/model_weights.hpp"
-#include "reference/forward_naive.hpp"
+#include "kernel_fusion_forward.hpp"
+// #include "reference/forward_naive.hpp"
 #include <iostream>
 #include <chrono>
 #include <iomanip>
@@ -82,7 +82,9 @@ int main(int argc, char** argv) {
 
 
         // Create ForwardNaive instance
-        ForwardNaive forward_naive(weights);
+        KernelFusionForwarder 
+        // ForwardNaive
+            forward_naive(weights);
 
         // Read input tokens
 
