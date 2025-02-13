@@ -16,7 +16,7 @@ bool assert_not_nan(T container) {
     }
 #endif
     return true;
-}
+};
 
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
@@ -68,7 +68,7 @@ int ForwardNaive::forward(std::vector<int> tokens) {
     Eigen::MatrixXf x(model().config().block_size, model().config().n_embd);
     // Matrices are not default initialized, unfortunately... Have to intiialize allto zeroes to avoid NAN.
     // I think masking should save this though? idk.
-    x.setZero();
+    // x.setZero();
 
     for (int i = 0; i < tokens.size(); ++i) {
         // We simply index into the tokens[i] vector to retrieve the embedding
@@ -79,22 +79,23 @@ int ForwardNaive::forward(std::vector<int> tokens) {
             model().wpe().row(i);
     }
 
+    // Karpathy does this I ll do the same 
+    // Okay.... adding these for some reason drastically changed inference.
+    // I feel like that obviously means something is wrong, no? but what do I know.
+    for (int i = tokens.size(); i < model().config().block_size; ++i) {
+        x.row(i) = 
+            model().wte().row(50256) + 
+            model().wpe().row(i);
+    }
+
     // At this step, **X** is a vector representing [# tokens, n_embed]
 
     // Padded tokens don't matter; TODO specify the proper attention mask
 
     // Forward through transformer blocks
     for (const auto& block : model().blocks()) {
-        // Before start of transformer block...
-        assert(assert_not_nan(x) && "Before transfomer block");
-
         x = x + causal_self_attention(layer_norm(x, block.ln_1), block.attn);
-
-        assert(assert_not_nan(x) && "Right after attention block...");
-
         x = x + mlp(layer_norm(x, block.ln_2), block.mlp);
-
-        assert(assert_not_nan(x) && "After transfomer block");
     }
 
     // Final layer norm
@@ -168,7 +169,7 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     Eigen::MatrixXf result = x * linear.weight;
     result.rowwise() += linear.bias;
     return result;
-}
+};
 
 Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
@@ -176,13 +177,15 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     int C = x.cols();
     assert(T == model().config().block_size);
     int n_head = model().config().n_head;
+
+    assert(C % n_head == 0);
     int head_dim = C / n_head; // Each head gets C/n_head features
 
     // 1. Compute qkv: project x with weight and add bias.
     //    attn.c_attn_weight should have shape [C, 3*C] and attn.c_attn_bias shape [3*C].
     //    The result qkv is of shape [T, 3*C].
 
-    auto qkv = forward_linear(x, attn.qkv);
+    Eigen::MatrixXf qkv = forward_linear(x, attn.qkv);
 
     // 2. Split qkv into q, k, v. Each will have shape [T, C].
     Eigen::MatrixXf q = qkv.leftCols(C);
@@ -196,6 +199,16 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     assert(assert_not_nan(q) && " q matrix");
     assert(assert_not_nan(k) && " k matrix");
     assert(assert_not_nan(v) && " v matrix");
+
+    /*
+        Okay I should probably try to understand the actual transpose magic going on when implementing attention, but for a first pass
+        this isn't so bad. 
+
+        From what I understand, the "actual" embeddings are just C / n_heads long.
+        Partition into blocks of [T, actual_embd]. 
+
+        Then operate on those indivdually. Am I correct? 
+    */
 
     for (int h = 0; h < n_head; h++) {
         // Extract block corresponding to head h.
@@ -215,12 +228,8 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
         // 6. Apply a causal mask: for each row i, zero out (or set to -infinity) any column j > i.
         //    Here we loop over rows and columns.
         for (int i = 0; i < T; i++) {
-            for (int j = 0; j < T; j++) {
-                // I guess we already imply with the (j > i) mask here, so we don't NEED to care if our tokens
-                // attend to some useless ones? idk.
-                // if (j > i || std::max(i, j) >= max_seq_length)
-                if (j > i)
-                    att_h(i, j) = -std::numeric_limits<float>::infinity();
+            for (int j = i + 1; j < T; j++) {
+                att_h(i, j) = -std::numeric_limits<float>::infinity();
             }
         }
 
@@ -239,11 +248,6 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     }
 
     assert(assert_not_nan(y) && " before attention projection ");
-
-    // 10. Apply the final output projection.
-    //     attn.c_proj_weight should have shape [C, C] and attn.c_proj_bias shape [C].
-
-    // I'm not sure if I should transpose here, actually, the attention matrices are all weird and funky bro.
 
     y = forward_linear(y, attn.c_proj);
     return y;
@@ -275,52 +279,42 @@ Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
     x = forward_linear(x, mlp.to_up);
     x = gelu(x);
     x = forward_linear(x, mlp.back_down);
-    return x;
+    return std::move(x);
 }
 
 // Some nice Eigen code here, but overall nothing too scary.
 Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
     // Explicitly write this independently, since I'm not that familiar with layernorm... matrix operations scary
-
-    // sanity check that before layernorm, my program is sane.
-    assert(assert_not_nan(x) && "Before layernorm");
-
     constexpr float eps = 1e-5;
-
-    auto result = x;
 
     for (int i = 0; i < x.rows(); ++i) { // iterate over all tokens
         float mean = x.row(i).mean();
         float variance = (x.row(i).array() - mean).square().sum() / x.cols();
-        auto denom = std::sqrt(variance + eps);
+        float denom = 1.0f / std::sqrt(variance + eps);
 
-        // Okay bro I'm just gonna manually implement this for now, Eigen operations just don't make sense
+        /*
+            Lesson learned, wow. 
 
-        for (int j = 0; j < x.cols(); ++j) {
-            // The weights and biases for layernorm are stored as [n_ebd, 1] vector; this is just a dot product basically.
-            result(i, j) = (x(i, j) - mean) / denom * ln.gamma(j, 0) + ln.beta(j, 0);
-        }
+            "x.row(i).dot(ln.gamma);"
+
+            This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i). 
+
+            Fair. That did look sus to me...
+        */
+
+        x.row(i) = ((x.row(i).array() - mean) * denom);
+        x.row(i) = x.row(i).array() * ln.gamma.array() + ln.beta.array();
     }
-    // sanity check that my layernorm didn't kill the program
-    assert(assert_not_nan(result) && "After layernorm");
-    return result;
+    return std::move(x);
+}
+
+float _gelu(float x) {
+    const float GELU_SCALE = std::sqrt(2.0f / static_cast<float>(M_PI));
+    float cube = 0.044715f * x * x * x;
+    return 0.5f * x * (1.0f + tanhf(GELU_SCALE * (x + cube)));
 }
 
 // aight buddy
 Eigen::MatrixXf ForwardNaive::gelu(Eigen::MatrixXf x) {
-    for (int i = 0; i < x.rows(); ++i) {
-        for (int j = 0; j < x.cols(); ++j) {
-
-            assert(x(i ,j) == x(i, j) && "Before gelu");
-
-            auto v = x(i, j);
-
-            x(i, j) = 0.5 * v * (1.0 + tanhf(
-                v + 0.044715 * v * v * v
-            )) ;
-
-            assert(x(i ,j) == x(i, j) && "Afte gelu");
-        }
-    }
-    return x;
+    return std::move(x.unaryExpr(&_gelu));
 }

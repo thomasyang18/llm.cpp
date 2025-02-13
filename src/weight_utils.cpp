@@ -2,9 +2,9 @@
 #include <cnpy.h>
 
 namespace weight_utils {
-    Eigen::VectorXf load_1d_tensor(const std::filesystem::path& path) {
+    Eigen::RowVectorXf load_1d_tensor(const std::filesystem::path& path) {
         cnpy::NpyArray arr = cnpy::npy_load(path.string());
-        return Eigen::Map<Eigen::VectorXf>(arr.data<float>(), arr.shape[0]);
+        return Eigen::Map<Eigen::RowVectorXf>(arr.data<float>(), arr.shape[0]);
     }
 
     Eigen::MatrixXf load_2d_tensor(const std::filesystem::path& path) {
@@ -26,7 +26,7 @@ namespace weight_utils {
         }
     }
 
-    void assert_vector_shape(const Eigen::VectorXf& vector, int size, std::string vector_name) {
+    void assert_vector_shape(const Eigen::RowVectorXf& vector, int size, std::string vector_name) {
         if (vector.size() != size) {
             std::ostringstream oss;
             oss << "vector shape mismatch for '" << vector_name << "'.\n";

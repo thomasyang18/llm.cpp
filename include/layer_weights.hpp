@@ -39,9 +39,8 @@ struct MLPWeights {
 struct LayerNormWeights {
     // Recall that these were transposed from the original documentaiton.
     // (although we just manually implemented this lol...)
-
-    Eigen::VectorXf gamma;         // [n_embd] this is gamma. (768, 1)
-    Eigen::VectorXf beta;           // [n_embd] this is beta. (768, 1)
+    Eigen::RowVectorXf gamma;
+    Eigen::RowVectorXf beta;           
 };
 
 struct TransformerBlockWeights {

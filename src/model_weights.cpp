@@ -58,8 +58,8 @@ void assert_linear(const Linear& input, int in_dim, int out_dim, std::string nam
 }
 
 void assert_layer_norm(const LayerNormWeights& input, int size, std::string name) {
-    weight_utils::assert_vector_shape(input.beta, size, name);
     weight_utils::assert_vector_shape(input.gamma, size, name);
+    weight_utils::assert_vector_shape(input.beta, size, name);
 }
 
 void ModelWeights::load_transformer_block(int layer_idx, const fs::path& dir_path) {
