@@ -1,22 +1,14 @@
-# GPT-2 Implementation in C++
+# GPT-2 Implementation in C++ for CPU Inference
 
-This repository contains an implementation of the GPT-2 language model in C++. The project aims to provide a basic understanding of how large language models work by implementing the core components of GPT-2. Additionally, the implementation includes some basic optimizations to improve performance.
+This repository contains an implementation of the GPT-2 language model in C++. The project aims to provide a basic understanding of how large language models work by implementing the core components of GPT-2. Additionally, I want to implement some basic passes such as: 
+    - **K-V caching**
+    - **Kernel Fusion**. Not exactly sure how this will work without a GPU. Maybe I can just rent a GPU and add GPU support... but theoretically this should still be possible since cache hierarchies are a thing too. Well, it's educational at the end of the day regardless.
 
-## Features
+### Dependencies
 
-- **Basic GPT-2 Implementation**: The core components of the GPT-2 model, including the transformer architecture, are implemented in C++.
-- **Optimizations**: Several optimizations are included to improve the performance of the model, such as efficient matrix operations and memory management.
-- **Modular Design**: The code is designed to be modular, making it easy to understand and extend.
+- Eigen 
+- cnpy
 
-## Getting Started
+### How to get the weights
 
-### Prerequisites
-
-- C++ compiler (e.g., g++)
-- Eigen library
-- CMake (optional, for building the project)
-
-### Building the Project
-
-To build the project, you can use the provided Makefile or CMakeLists.txt file. Run the following command to build the project using the Makefile:
-
+I serialized the weights from numpy by downloading them from google colab. My linux partition is extremely small and my PC is small in general, so downloading torch was out of the question :/. Pretty handy. 
