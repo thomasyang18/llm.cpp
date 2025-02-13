@@ -166,9 +166,9 @@ Oh wait, nvm. I see.
 // And today I learned that all vectors in Eigen are column vectors, not row vectors.
 
 Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
-    Eigen::MatrixXf result = x * linear.weight;
-    result.rowwise() += linear.bias;
-    return result;
+    x = x * linear.weight;
+    x.rowwise() += linear.bias;
+    return x;
 };
 
 Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
@@ -225,8 +225,9 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
         float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
         att_h *= scale;
 
-        // 6. Apply a causal mask: for each row i, zero out (or set to -infinity) any column j > i.
-        //    Here we loop over rows and columns.
+        // // 6. Apply a causal mask: for each row i, zero out (or set to -infinity) any column j > i.
+        // //    Here we loop over rows and columns.
+        // recall that att(i, j) is how much token i attends to token j. 
         for (int i = 0; i < T; i++) {
             for (int j = i + 1; j < T; j++) {
                 att_h(i, j) = -std::numeric_limits<float>::infinity();
@@ -235,9 +236,7 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
 
         // 7. Apply softmax to each row of att_h.
         //    For numerical stability, subtract the max in each row before exponentiating.
-        for (int i = 0; i < T; i++) {
-            att_h.row(i) = softmax(att_h.row(i));
-        }
+        for (int i = 0; i < T; i++) att_h.row(i) = softmax(att_h.row(i));
 
         // 8. Compute the weighted sum of the values: out_h = att_h * v_h.
         //    out_h has shape [T, head_dim].
@@ -279,7 +278,7 @@ Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
     x = forward_linear(x, mlp.to_up);
     x = gelu(x);
     x = forward_linear(x, mlp.back_down);
-    return std::move(x);
+    return x;
 }
 
 // Some nice Eigen code here, but overall nothing too scary.
@@ -291,21 +290,9 @@ Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeigh
         float mean = x.row(i).mean();
         float variance = (x.row(i).array() - mean).square().sum() / x.cols();
         float denom = 1.0f / std::sqrt(variance + eps);
-
-        /*
-            Lesson learned, wow. 
-
-            "x.row(i).dot(ln.gamma);"
-
-            This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i). 
-
-            Fair. That did look sus to me...
-        */
-
-        x.row(i) = ((x.row(i).array() - mean) * denom);
-        x.row(i) = x.row(i).array() * ln.gamma.array() + ln.beta.array();
+        x.row(i) = ((x.row(i).array() - mean) * denom) * ln.gamma.array() + ln.beta.array();
     }
-    return std::move(x);
+    return x;
 }
 
 float _gelu(float x) {
@@ -315,6 +302,17 @@ float _gelu(float x) {
 }
 
 // aight buddy
-Eigen::MatrixXf ForwardNaive::gelu(Eigen::MatrixXf x) {
-    return std::move(x.unaryExpr(&_gelu));
-}
+Eigen::MatrixXf ForwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
+
+/*
+    Any time you do any operation on a matrix, it's not "persistent", I think. 
+    Like, if I call x.unaryExpr(&_gelu), it's not gonna do anything until I save it to somewhere (save it back to x, for example).
+    Interesting. Makes sense. Values are OP, but you want the speed of references somehow...
+*/
+
+/*
+    Lesson learned, wow. 
+    "x.row(i).dot(ln.gamma);"
+    This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i). 
+    Fair. That did look sus to me...
+*/
