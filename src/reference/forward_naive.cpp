@@ -171,6 +171,11 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     return x;
 };
 
+// This can be significantly sped up in general by just only passing in increments of 1, 2, 3 etc. rather than 1024
+// It's kind of amazing how this architecture just, works... it's not dependent on sequence length at all, which is kind of insane. 
+// (as in, there's no fixed like, size for things. Back when I learned neural nets, you had to have a new neuron or set of neurons)
+// for everything you wanted to encode....
+
 Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
     int T = x.rows();

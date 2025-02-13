@@ -1,5 +1,9 @@
-#include "kv_caching_forward.hpp"
-// #include "kernel_fusion_forward.hpp"
+// #include "kv_caching_forward.hpp"
+
+
+#include "kernel_fusion_forward.hpp"
+
+
 // #include "reference/forward_naive.hpp"
 #include <iostream>
 #include <chrono>
@@ -7,7 +11,7 @@
 #include <vector>
 #include <filesystem>
 
-const int MAX_INFERENCE_TOKENS = 100;
+const int MAX_INFERENCE_TOKENS = 50;
 
 void print_tensor_info(const std::string& name, const Eigen::MatrixXf& tensor) {
     std::cout << name << ": " << tensor.rows() << " x " << tensor.cols() << "\n";
@@ -40,55 +44,20 @@ int main(int argc, char** argv) {
     }
 
     try {
-        auto start_time = std::chrono::high_resolution_clock::now();
-
         // Initialize config with default values
         GPTConfig config;
-        std::cout << "Initializing GPT-2 with config:\n"
-                  << "vocab_size: " << config.vocab_size << "\n"
-                  << "n_layer: " << config.n_layer << "\n"
-                  << "n_head: " << config.n_head << "\n"
-                  << "n_embd: " << config.n_embd << "\n"
-                  << "block_size: " << config.block_size << "\n\n";
-
         // Create model weights instance
         ModelWeights weights(config);
-
         // Load weights
         std::cout << "Loading weights from: " << argv[1] << std::endl;
         weights.load_weights(argv[1]);
-
-        // Print timing information
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        std::cout << "Loading completed in " << duration.count() << "ms\n\n";
-
         std::cout << "All weights loaded successfully!\n";
 
-        // Okay, I need to just print out the weights here.
-        // *surely* I'm not going insane, right? My algorithm seems correct now.
-        // The only thing that can be wrong is the data but I serialized it striaght from colab....
-        // print_tensor_info("wte", weights.wte());
 
-        /*
-            There's simply no way dooing this fails. I'm literally just gonna write back what I think is the tensor to memory. 
-
-            cnpy::NpyArray arr = cnpy::npy_load(path.string());
-        */
-
-        // Row vectors seem to be fine. 
-        // print_tensor_info("dev/model_weights/transformer.ln_f.bias.npy", weights.ln_f().beta);
-
-        // exit(0);
-
-
-        // Create ForwardNaive instance
-        // KernelFusionForwarder 
+        KernelFusionForwarder 
         // ForwardNaive
-        KVCachingForwarder
+        // KVCachingForwarder
             forward_naive(weights);
-
-        // Read input tokens
 
         // int N;
         // std::cout << "Enter the number of tokens: ";
@@ -109,9 +78,12 @@ int main(int argc, char** argv) {
             15496, 11, 314, 1101, 257, 3303, 2746, 13
         };
 
-        tokens = forward_naive.forward_until(tokens, 50);
+        auto start_time = std::chrono::high_resolution_clock::now();
 
-        /*
+        // Kernel fusion / naive impl
+
+
+        
 
         // Token generation loop
         for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
@@ -135,7 +107,16 @@ int main(int argc, char** argv) {
                 break;
             }
         }
-        */
+        
+
+        // Else, kv caching impl 
+
+        // tokens = forward_naive.forward_until(tokens, 50);
+
+        // Print timing information
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        std::cout << "Inference done in in " << duration.count() << "ms\n\n";
 
         // Print resulting token array
         std::cout << "Resulting token array: [";
