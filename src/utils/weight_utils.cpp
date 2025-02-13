@@ -7,24 +7,13 @@ namespace weight_utils {
         return Eigen::Map<Eigen::RowVectorXf>(arr.data<float>(), arr.shape[0]);
     }
 
-    /*
-        I'm a fucking genius.
-        Well, no, I'm really not, because I knew that model serialization was an issue, and that the docs were an issue 
-        and I wrote this with AI which wouldn't understand the intracacies of this. 
-
-        And this is some mundane data munging bullshit. 
-
-        But whatever man, I'm a genius. 
-
-        Obviously this means our debug process needs to be way better.... 
-
-        BUT I DON'T CARE!!! WE GOT THIS SHITTY ASS THING WORKING!!!!
-    */
+    // Genius debugging session
+    // TL;DR Eigen is all column major, while all exported data was row-major. 
+    // So need to be clever here; double flip flop! Or triple? 
     Eigen::MatrixXf load_2d_tensor(const std::filesystem::path& path) {
         cnpy::NpyArray arr = cnpy::npy_load(path.string());
         return Eigen::Map<Eigen::MatrixXf>(
             arr.data<float>(),
-            // Reverse the dimensions then transpose it back T_T
             arr.shape[1],
             arr.shape[0]
         ).transpose();
