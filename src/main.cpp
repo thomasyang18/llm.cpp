@@ -1,5 +1,5 @@
-#include "kv_caching_forward.hpp"
-#include "kernel_fusion_forward.hpp"
+#include "reference/kv_caching_forward.hpp"
+#include "reference/flash_attention_1_forward.hpp"
 #include "reference/forward_naive.hpp"
 
 #include <iostream>
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
             
             tokens = forwarder.forward_until(tokens, MAX_INFERENCE_TOKENS);    
         } else if (MODE == 2) {
-            KernelFusionForwarder
+            FlashAttention1Forwarder
                 forward_naive(weights);
 
             tokens = one_by_one(forward_naive, tokens);
