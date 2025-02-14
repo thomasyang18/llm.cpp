@@ -3,8 +3,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra
 INCLUDES = -I./include -I/usr/local/include/eigen3
 
 # Libraries
-CNPY_LIB = -lcnpy
-ZLIB = -lz
+CXXLIB = -lcnpy -lz
 
 SRCDIR = src
 OBJDIR = obj
@@ -28,9 +27,10 @@ TARGET = $(BINDIR)/gpt2_weight_loader
 # Default build type
 BUILD_TYPE ?= release
 ifeq ($(BUILD_TYPE), debug)
-    CXXFLAGS += -O0 -DDEBUG -g
+    CXXFLAGS += -O0 -DDEBUG -g 
 else
-    CXXFLAGS += -O3 -DRELEASE
+    CXXFLAGS += -O3 -DRELEASE -DEIGEN_USE_BLAS -mavx -mfma
+	CXXLIB += -lopenblas
 endif
 
 # Ensure top-level directories exist
@@ -39,7 +39,7 @@ $(shell mkdir -p $(OBJDIR) $(BINDIR))
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(CNPY_LIB) $(ZLIB)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(CXXLIB)
 
 # Rule to compile .cpp files into .o files.
 # The command first ensures that the target directory exists.

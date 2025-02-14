@@ -21,10 +21,10 @@ public:
     // weight tying
     const Eigen::MatrixXf& lm_head() const {return _wte; }
 
-    const GPTConfig config() const {return _config; }
+    const GPTConfig& config() const {return _config; }
 
 private:
-    const GPTConfig _config;
+    const GPTConfig& _config;
 
     // Token and position embeddings
     Eigen::MatrixXf _wte;    // [vocab_size, n_embd]

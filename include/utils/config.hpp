@@ -2,6 +2,12 @@
 #include <string>
 #include <cassert>
 
+// Oh my god, I think the issue is 
+// that because this dataclass isn't backed by an object file I don't recompile this? 
+// And it leads to segfaults because this technically is data or something? idrk, but 
+// I modified this, ran make again, and basically everything was fine for some reason, but then 
+// I segfaulted and this was the culprit. 
+
 struct GPTConfig {
     int block_size = 1024;
     int vocab_size = 50257;
@@ -10,6 +16,8 @@ struct GPTConfig {
     int n_embd = 768;
 
     int EOT_TOKEN = 50256;
+
+    int top_k_sample = 10; // Set this to 1 when debugging.
 
     GPTConfig() {
         assert(n_embd % n_head == 0);

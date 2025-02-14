@@ -49,6 +49,7 @@ namespace sampling {
         }
 
         std::discrete_distribution<> dist(top_k_probs.begin(), top_k_probs.end());
+
         std::mt19937 gen(std::random_device{}());
         int sampled_index = dist(gen);
 
@@ -65,7 +66,7 @@ int ForwardNaive::forward(std::vector<int> tokens) {
     assert(0 < tokens.size() && tokens.size() <= model().config().block_size &&
         "Passing more tokens than max sequence length.");
 
-    Eigen::MatrixXf x(model().config().block_size, model().config().n_embd);
+    Eigen::MatrixXf x(tokens.size(), model().config().n_embd);
     // Matrices are not default initialized, unfortunately... Have to intiialize allto zeroes to avoid NAN.
     // I think masking should save this though? idk.
     // x.setZero();
@@ -82,11 +83,11 @@ int ForwardNaive::forward(std::vector<int> tokens) {
     // Karpathy does this I ll do the same 
     // Okay.... adding these for some reason drastically changed inference.
     // I feel like that obviously means something is wrong, no? but what do I know.
-    for (int i = tokens.size(); i < model().config().block_size; ++i) {
-        x.row(i) = 
-            model().wte().row(50256) + 
-            model().wpe().row(i);
-    }
+    // for (int i = tokens.size(); i < model().config().block_size; ++i) {
+    //     x.row(i) = 
+    //         model().wte().row(50256) + 
+    //         model().wpe().row(i);
+    // }
 
     // At this step, **X** is a vector representing [# tokens, n_embed]
 
@@ -123,7 +124,7 @@ int ForwardNaive::forward(std::vector<int> tokens) {
 
     Eigen::RowVectorXf logits = (x * model().lm_head().transpose()).row(tokens.size() - 1);
 
-    int sampled_token = sampling::top_k_sample(logits, 10);
+    int sampled_token = sampling::top_k_sample(logits, model().config().top_k_sample);
 
     return sampled_token;
 }
@@ -180,7 +181,7 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
     int T = x.rows();
     int C = x.cols();
-    assert(T == model().config().block_size);
+    // assert(T == model().config().block_size);
     int n_head = model().config().n_head;
 
     assert(C % n_head == 0);
@@ -218,9 +219,9 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
     for (int h = 0; h < n_head; h++) {
         // Extract block corresponding to head h.
         // Each block has shape [T, head_dim].
-        Eigen::MatrixXf q_h = q.block(0, h * head_dim, T, head_dim);
-        Eigen::MatrixXf k_h = k.block(0, h * head_dim, T, head_dim);
-        Eigen::MatrixXf v_h = v.block(0, h * head_dim, T, head_dim);
+        Eigen::MatrixXf q_h = q.middleCols(h * head_dim, head_dim);
+        Eigen::MatrixXf k_h = k.middleCols(h * head_dim, head_dim);
+        Eigen::MatrixXf v_h = v.middleCols(h * head_dim, head_dim);
 
         // 5. Compute the attention scores for head h.
         //    att_h = q_h * k_h^T, so att_h has shape [T, T].
@@ -247,8 +248,8 @@ Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const Att
         //    out_h has shape [T, head_dim].
         Eigen::MatrixXf out_h = att_h * v_h;
 
-        // 9. Write out_h into the appropriate block of the output y.
-        y.block(0, h * head_dim, T, head_dim) = out_h;
+        // 9. Write out_h into the appropriate middleCols of the output y.
+        y.middleCols(h * head_dim, head_dim) = out_h;
     }
 
     assert(assert_not_nan(y) && " before attention projection ");

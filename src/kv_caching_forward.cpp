@@ -51,6 +51,29 @@ Eigen::MatrixXf KVCachingForwarder::causal_self_attention(Eigen::MatrixXf x, con
             We use our q[tok_idx], to compute the dot product w.r.t all {v[i] | i <= tok_idx}
         */
 
+
+        /*
+            Also, seeing the loops explicitly laid out like this (u can def make these matrices tho), yeah. 
+            I see bactra's point now.
+            http://bactra.org/notebooks/nn-attention-and-transformers.html
+
+            If you have a function that tells you "how close" something is to something else, 
+            you can run that through the weighted average.
+
+            We split it up here as softmax -> mult on value function y[i]
+
+            but you can view it as 
+
+            compute "relevant distance metric" -> (kernel smooth with distance function and value functions)
+
+            These loops make that pretty explicit, I think. 
+
+            I guess the one weird thing is that y[i] is also an embedding space, and you can combine embedding spaces 
+            just like you can scalars, theoretically? idk people always handwave that, seems legit, ML is magic..
+
+            Kinda crazy orzocity.
+        */
+
         for (int i = 0; i < total_tokens; ++i) {
             const Eigen::RowVectorXf& ki = kv_cache[i][layer].k.segment(h * head_dim, head_dim);
             att_h(i) = q_h.dot(ki);

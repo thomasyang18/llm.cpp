@@ -1,10 +1,7 @@
-// #include "kv_caching_forward.hpp"
-
-
+#include "kv_caching_forward.hpp"
 #include "kernel_fusion_forward.hpp"
+#include "reference/forward_naive.hpp"
 
-
-// #include "reference/forward_naive.hpp"
 #include <iostream>
 #include <chrono>
 #include <iomanip>
@@ -37,6 +34,31 @@ void print_tensor_info(const std::string& name, const Eigen::RowVectorXf& tensor
     std::cout << "First few values: " << tensor.head(std::min(5, (int)tensor.size())).transpose() << "\n\n";
 }
 
+template<typename T> 
+std::vector<int> one_by_one(T& forwarder, std::vector<int> tokens ) {
+    for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
+        if (tokens.size() > forwarder.model().config().block_size) tokens.erase(tokens.begin());
+        int next_token = forwarder.forward(tokens);
+        // std::cerr << " ADDING TOKEN " << next_token << std::endl;
+        tokens.push_back(next_token);
+
+        // Print resulting token array
+        std::cout << "Resulting token array: [";
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            std::cout << tokens[i];
+            if (i < tokens.size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "]\n";
+
+        if (next_token == forwarder.model().config().EOT_TOKEN) { // EOT token
+            break;
+        }
+    }
+    return tokens;
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <path_to_weights_dir>\n";
@@ -54,64 +76,38 @@ int main(int argc, char** argv) {
         std::cout << "All weights loaded successfully!\n";
 
 
-        KernelFusionForwarder 
-        // ForwardNaive
-        // KVCachingForwarder
-            forward_naive(weights);
-
-        // int N;
-        // std::cout << "Enter the number of tokens: ";
-        // std::cin >> N;
-
-        // std::vector<int> tokens(N);
-        // std::cout << "Enter the tokens: ";
-        // for (int i = 0; i < N; ++i) {
-        //     std::cin >> tokens[i];
-        // }
-
-        /*
-            Hardcoded in input tokens for debugging purposes
-        */
-
         int N = 8;
         std::vector<int> tokens = {
             15496, 11, 314, 1101, 257, 3303, 2746, 13
         };
+        int MODE;
+        std::cin >> MODE;
+
+        // debug add 
+        config.top_k_sample = 1;
+
+        // lol this wasn't a reference 
+        assert(weights.config().top_k_sample == 1);
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Kernel fusion / naive impl
+        if (MODE == 0) {
+            ForwardNaive
+                forward_naive(weights);
 
+            tokens = one_by_one(forward_naive, tokens);
+            
+        } else if (MODE == 1) {
+            KVCachingForwarder
+                forwarder(weights);
+            
+            tokens = forwarder.forward_until(tokens, MAX_INFERENCE_TOKENS);    
+        } else if (MODE == 2) {
+            KernelFusionForwarder
+                forward_naive(weights);
 
-        
-
-        // Token generation loop
-        for (int i = 0; i < MAX_INFERENCE_TOKENS; ++i) {
-            if (tokens.size() > weights.config().block_size) tokens.erase(tokens.begin());
-            int next_token = forward_naive.forward(tokens);
-            // std::cerr << " ADDING TOKEN " << next_token << std::endl;
-            tokens.push_back(next_token);
-
-
-            // Print resulting token array
-            std::cout << "Resulting token array: [";
-            for (size_t i = 0; i < tokens.size(); ++i) {
-                std::cout << tokens[i];
-                if (i < tokens.size() - 1) {
-                    std::cout << ", ";
-                }
-            }
-            std::cout << "]\n";
-
-            if (next_token == 50256) { // EOT token
-                break;
-            }
-        }
-        
-
-        // Else, kv caching impl 
-
-        // tokens = forward_naive.forward_until(tokens, 50);
+            tokens = one_by_one(forward_naive, tokens);
+        } else assert(false);   
 
         // Print timing information
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -119,7 +115,7 @@ int main(int argc, char** argv) {
         std::cout << "Inference done in in " << duration.count() << "ms\n\n";
 
         // Print resulting token array
-        std::cout << "Resulting token array: [";
+        std::cout << "Resulting token array:\n [";
         for (size_t i = 0; i < tokens.size(); ++i) {
             std::cout << tokens[i];
             if (i < tokens.size() - 1) {

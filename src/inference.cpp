@@ -63,7 +63,9 @@ int Forwarder::sampler(Eigen::RowVectorXf logits) {
     std::priority_queue<std::pair<float, int>> lowest;
     std::vector<std::pair<float, int>> highest;
 
-    const int THRESH = 10;
+    const int THRESH = model().config().top_k_sample;
+    assert(THRESH > 0); // perhaps we can make top_k_sample an optional? idk.
+
     for (int i = 0; i < model().config().vocab_size; ++i) {
         lowest.emplace(-logits[i], i); 
         while (lowest.size() > THRESH) lowest.pop();
