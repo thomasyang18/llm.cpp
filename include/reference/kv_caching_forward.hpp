@@ -1,3 +1,15 @@
+// One of the most intuitive observations, once you understand that 
+// the transformer architecture doesn't *really* depend on the sequence length at all.
+// All the weight matrices operate on independent tokens, and the "kernel smoothing" bit just works.
+// This is a really creative architecture and algorithm.
+
+/*
+also, if the weight position embeddings are just some sine wave and not trained alongside the model, 
+then a model can have infinite context length can it not. ig hardware concerns tho.ADJ_OFFSET_SINGLESHOT
+
+plus no way infintie context length is good lol too much context = bad.(RoPE?)
+*/
+
 #pragma once
 
 #include "inference.hpp"
