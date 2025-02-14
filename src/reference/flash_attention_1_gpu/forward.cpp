@@ -62,6 +62,8 @@ Eigen::MatrixXf FlashAttention1ForwarderGPU::causal_self_attention(Eigen::Matrix
 
         // Recall that *all eigen vectors are column major by default*. 
         go_gpu(hbm_q.data(), hbm_k.data(), hbm_v.data(), o, N, d, M);
+
+        delete o;
         
         // write back out to true global slice. Be careful about transposes and stuff. 
         global_o.middleCols(h * d, d) = Eigen::Map<row_major_t>(o, N, d);

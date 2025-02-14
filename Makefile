@@ -1,59 +1,76 @@
+# Compilers
 CXX = g++
+NVCC = nvcc
+
+# Flags
 CXXFLAGS = -std=c++17 -Wall -Wextra
-INCLUDES = -I./include -I/usr/local/include/eigen3
+NVCCFLAGS = -std=c++17 
+
+# Include directories (add CUDA include)
+INCLUDES = -I./include -I/usr/local/include/eigen3 -I/usr/local/cuda/include
 
 # Libraries
 CXXLIB = -lcnpy -lz
-
-SRCDIR = src
-OBJDIR = obj
-BINDIR = bin
-
-# Recursively find all .cpp files in $(SRCDIR)
-SOURCES := $(shell find $(SRCDIR) -type f -name '*.cpp')
-
-# Convert sources to corresponding object files in $(OBJDIR)
-# This preserves the directory structure, e.g. src/foo/bar.cpp becomes obj/foo/bar.o
-OBJECTS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SOURCES))
-
-# If main.o exists, force it to the front of the object list.
-OBJECTS := $(if $(filter $(OBJDIR)/main.o,$(OBJECTS)), \
-             $(OBJDIR)/main.o $(filter-out $(OBJDIR)/main.o,$(OBJECTS)), \
-             $(OBJECTS))
-
-# Main target
-TARGET = $(BINDIR)/gpt2_weight_loader
-
-# Default build type
-BUILD_TYPE ?= release
+# For release builds, linking with OpenBLAS might be needed:
 ifeq ($(BUILD_TYPE), debug)
     CXXFLAGS += -O0 -DDEBUG -g 
 else
     CXXFLAGS += -O3 -DRELEASE -DEIGEN_USE_BLAS -mavx -mfma
-	CXXLIB += -lopenblas
+    CXXLIB += -lopenblas
 endif
 
-# Ensure top-level directories exist
+
+CUDA_LIB_PATH = /usr/local/cuda/lib64  # Change if using a different CUDA install
+
+# CUDA runtime library (nvcc usually links this automatically, but include if needed)
+NVCCLIB = -L$(CUDA_LIB_PATH) -lcudart
+
+# Directories
+SRCDIR = src
+OBJDIR = obj
+BINDIR = bin
+
+# Find all C++ sources (.cpp) and CUDA sources (.cu)
+CPP_SOURCES := $(shell find $(SRCDIR) -type f -name '*.cpp')
+CU_SOURCES := $(shell find $(SRCDIR) -type f -name '*.cu')
+
+# Convert sources to object files (preserving directory structure)
+CPP_OBJECTS := $(patsubst $(SRCDIR)/%.cpp, $(OBJDIR)/%.o, $(CPP_SOURCES))
+CU_OBJECTS := $(patsubst $(SRCDIR)/%.cu, $(OBJDIR)/%.cu.o, $(CU_SOURCES))
+
+# Place main.o at the beginning if it exists
+CPP_OBJECTS := $(if $(filter $(OBJDIR)/main.o, $(CPP_OBJECTS)), \
+             $(OBJDIR)/main.o $(filter-out $(OBJDIR)/main.o, $(CPP_OBJECTS)), \
+             $(CPP_OBJECTS))
+
+# Final target: link both C++ and CUDA object files
+TARGET = $(BINDIR)/gpt2_weight_loader
+
+# Ensure necessary directories exist
 $(shell mkdir -p $(OBJDIR) $(BINDIR))
 
 all: $(TARGET)
 
-$(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(CXXLIB)
+$(TARGET): $(CPP_OBJECTS) $(CU_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(CPP_OBJECTS) $(CU_OBJECTS) -o $@ $(CXXLIB) $(NVCCLIB)
 
-# Rule to compile .cpp files into .o files.
-# The command first ensures that the target directory exists.
+# Rule to compile C++ (.cpp) files into .o files.
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Dependency tracking: generate .d files alongside .o files.
+# Rule to compile CUDA (.cu) files into .o files using nvcc.
+$(OBJDIR)/%.cu.o: $(SRCDIR)/%.cu
+	@mkdir -p $(dir $@)
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
+
+# Dependency tracking for C++ sources (if needed)
 $(OBJDIR)/%.d: $(SRCDIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< -o $@
 
-# Include all dependency files (if they exist)
--include $(OBJECTS:.o=.d)
+# Include dependency files (if they exist)
+-include $(CPP_OBJECTS:.o=.d)
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET)
