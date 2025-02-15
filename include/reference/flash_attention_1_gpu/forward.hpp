@@ -8,7 +8,7 @@ public:
 
     Eigen::MatrixXf causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attention) override;
 
-    void go_gpu(const float *q, const float *k, const float *v, float* o, int N, int d, int M);
+    void go_gpu(const float *q, const float *k, const float *v, float* o, int N, int d);
 
     int forward(std::vector<int> tokens) override;
 };

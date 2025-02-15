@@ -2,23 +2,6 @@
 
 FlashAttention1ForwarderGPU::FlashAttention1ForwarderGPU(const ModelWeights& model) : Forwarder(model) {}
 
-/*
-    M = Arbitrary constant, not really that interested in fine-tuning/benchmarking but 
-
-    floats (our dtype) are 4 bytes 
-    core {0, 1} are on the same chip, have the same L2 cache (I think)
-    so disable core 1 
-    to get a reasonable estimate of 2^20 floats. 
-
-    worried about thrashing but whatever, seems like a clean enough #. dont know enough about real
-    perf engineering to reason about this 
-*/
-// none of these constants worked, makes a decent amount of sense?
-// my program isn't doing any specialized high performance matrix math, not taking advantage of simd etc
-// well, maybe eigen does. even if it does, i doubt some of my loops are optimal lmao.
-
-const int M = 2<<20; 
-
 Eigen::MatrixXf FlashAttention1ForwarderGPU::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     int N = x.rows();
     int d = model().config().n_embd / model().config().n_head;
@@ -61,7 +44,7 @@ Eigen::MatrixXf FlashAttention1ForwarderGPU::causal_self_attention(Eigen::Matrix
         std::fill(o, o + N * d, 0);
 
         // Recall that *all eigen vectors are column major by default*. 
-        go_gpu(hbm_q.data(), hbm_k.data(), hbm_v.data(), o, N, d, M);
+        go_gpu(hbm_q.data(), hbm_k.data(), hbm_v.data(), o, N, d);
 
         delete o;
         
