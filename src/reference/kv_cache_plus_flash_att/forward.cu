@@ -72,7 +72,7 @@ namespace {
 namespace { // nice that anonymous namespaces work in CUDA still    
    __constant__ float q[MAX_D]; // global cache for q
 
-
+    
 }   
 
 
@@ -88,6 +88,8 @@ void KV_Cache_Plus_Flash_Forwarder::go_gpu(const __host__ float *q,
     int Bc = ceildiv(::constants::M, 4 * d);
     int Tc = ceildiv(N, Bc);
 
-    
+    // wanted to write a generalized version of this, but I think constant pointers or something is messing up type deduction
+
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(::q, q, d * sizeof(float)));
 
 }
