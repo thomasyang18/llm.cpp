@@ -46,7 +46,7 @@ CPP_OBJECTS := $(if $(filter $(OBJDIR)/main.o, $(CPP_OBJECTS)), \
              $(CPP_OBJECTS))
 
 # Final target: link both C++ and CUDA object files
-TARGET = $(BINDIR)/gpt2_weight_loader
+TARGET = $(BINDIR)/gpt2
 
 # Ensure necessary directories exist
 $(shell mkdir -p $(OBJDIR) $(BINDIR))

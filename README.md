@@ -4,13 +4,31 @@ This repository contains an implementation of the GPT-2 language model in C++. T
 
 - **K-V caching**
 
-- **Kernel Fusion**. Not exactly sure how this will work without a GPU. Maybe I can just rent a GPU and add GPU support... but theoretically this should still be possible since cache hierarchies are a thing too. Well, it's educational at the end of the day regardless.
+- **Flash Attention**
 
 ### Dependencies
 
 - Eigen 
 - cnpy
 
-### How to get the weights
+## Running the project (for colab or anything etc.)
 
-I serialized the weights from numpy by downloading them from google colab. My linux partition is extremely small and my PC is small in general, so downloading torch was out of the question :/. Pretty handy. 
+load model weights into /dev/model_weights, just run download script in the /dev directory (in colab)
+
+(or if running locally and don't want to install torch or something beefy, just load just the download script in a colab, zip up the files, and manually copy paste it in)
+
+run `make clean` then `make -j 8`
+
+then ./run.sh should just work out of the box. 
+
+(cnpy needs to be dynamically linked :/, by default its in /usr/local/lib after its install script)
+
+---
+
+### This is likely to be discontinued :/ 
+
+There are some interesting things I can do here, and the more I've learned about transformers, the more appreciative of how insane they are 
+
+(they're theroretically infinite context, if you replace `wpe` with something like sine waves or RoPE!)
+
+but idk. Maybe I can transition this to a big mono-repo where I can freely explore ML projects. 
