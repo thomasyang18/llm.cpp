@@ -28,12 +28,9 @@ __global__ void flash_attention_kernel(const float* __restrict__ q,
     
 }
 
-
+// linkage test
 namespace {
-    // Utility to compute ceiling division.
-    constexpr int ceildiv(int a, int b) {
-        return (a + b - 1) / b;
-    }
+__constant__ int myConstantData[256];
 }
 
 

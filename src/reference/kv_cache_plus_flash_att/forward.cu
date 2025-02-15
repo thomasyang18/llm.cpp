@@ -22,20 +22,72 @@ KV_Cache_Manager_GPU::~KV_Cache_Manager_GPU() {
     }
 }
 
-template<KV_Cache_Manager_GPU::KV_Type T>
-void KV_Cache_Manager_GPU::push_back(int layer, const __host__ float* data) {
-    // https://stackoverflow.com/questions/41011900/equivalent-ternary-operator-for-constexpr-if
-    // this seems interesting
-    // but just do it the "dumb" way 
+
+/*
+    START OF INTERESTING CODE
+
+    I mean, the high level idea is simple: 
+
+    We already know we don't have to recompute the whole thing because KV cache.
+
+    Just split your data into blocks 
+
+    [   k,v   ][    k,v    ][   k,v    ][    k,v     ]
+
+    And then apply softmax in parallel.
     
-    // copy [head1, 64][head2, 64][head3, 64] etc.
-    if constexpr (T == K) {
-        for (int j = 0; j < config().n_head; ++j) 
-            memcpy(_cache[layer][j].k, data + j * config().d(), config().d());
-    } else if constexpr (T == V) {
-        for (int j = 0; j < config().n_head; ++j) 
-            memcpy(_cache[layer][j].v, data + j * config().d(), config().d());
-    } else static_assert(T < 0); // because static_assert(false) won't work...
+    Note that q, and o are __constant__ and __global__, respectively. 
+
+    Because the online softmax algorithm forms a monoid (e.g. data type T with associativity), we can apply parallel reduction.
+
+    This will be like... acutally 0 speedup, probably. But it might be interesting to code.
+*/
+
+
+
+namespace {
+    namespace constants {
+        /* HIGHLY UNRIGOROUS PERF ENGINEERING
+
+        ChatGPT said:
+
+        The Tesla T4 GPU has the following cache details:
+
+            L1 Cache: 64 KB per SM (Streaming Multiprocessor)
+            so... M = 64KB :smiley:
+        */
+
+        constexpr int M = (1<<16);
+        // this is maximum, single-headed attention embedding value. 
+        // I mean we can theoretically make it larger to support arbitrary gpt2 models but...
+        // Let's just work with the small for now.
+        constexpr int MAX_D = 64;  
+    }
+
+    constexpr int ceildiv(int a, int b) {
+        return (a + b - 1) / b;
+    }
 }
 
+namespace { // nice that anonymous namespaces work in CUDA still    
+   __constant__ float q[MAX_D]; // global cache for q
 
+
+}   
+
+
+// q is a RowVector(d).
+// k, v are Matrix(N, d), row major. 
+// o is RowVector(d).
+void KV_Cache_Plus_Flash_Forwarder::go_gpu(const __host__ float *q, 
+            const __device__ float *k, 
+            const __device__ float *v, 
+            __host__ float* o, 
+            int N, int d)
+{
+    int Bc = ceildiv(::constants::M, 4 * d);
+    int Tc = ceildiv(N, Bc);
+
+    
+
+}

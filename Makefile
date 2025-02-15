@@ -14,8 +14,10 @@ CXXLIB = -lcnpy -lz
 # For release builds, linking with OpenBLAS might be needed:
 ifeq ($(BUILD_TYPE), debug)
     CXXFLAGS += -O0 -DDEBUG -g 
+	NVCCFLAGS += -O0 -DDEBUG -g 
 else
     CXXFLAGS += -O3 -DRELEASE -DEIGEN_USE_BLAS -mavx -mfma
+	NVCCFLAGS += -O3 -DRELEASE 
     CXXLIB += -lopenblas
 endif
 
