@@ -24,4 +24,8 @@ struct GPTConfig {
         // actual number of embeddings is n_embd/n_head, but GPT batches them since
         // they're mostly independent until attention
     }
+
+    inline int d() const {
+        return n_embd / n_head;
+    }
 };
