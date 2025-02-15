@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -67,6 +67,12 @@ inline void printDeviceMemory(const T* devPtr, size_t count) {
     }
     std::cout << std::endl;
     delete[] hostPtr;
+}
+
+// Memory copy to symbol on the device
+template <typename T>
+inline void cudaMemcpyToSymbol(const T* symbol, const T* hostPtr, size_t count, size_t offset = 0, cudaMemcpyKind kind = cudaMemcpyHostToDevice) {
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(symbol, hostPtr, count * sizeof(T), offset, kind));
 }
 
 }
