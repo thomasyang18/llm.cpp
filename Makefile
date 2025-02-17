@@ -67,9 +67,9 @@ $(OBJDIR)/%.cu.o: $(SRCDIR)/%.cu
 	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
 
 # Dependency tracking for C++ sources (if needed)
-$(OBJDIR)/%.d: $(SRCDIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< -o $@
+#$(OBJDIR)/%.d: $(SRCDIR)/%.cpp
+#	@mkdir -p $(dir $@)
+#	$(CXX) -MM $(CXXFLAGS) $(INCLUDES) $< -o $@
 
 # Include dependency files (if they exist)
 -include $(CPP_OBJECTS:.o=.d)
