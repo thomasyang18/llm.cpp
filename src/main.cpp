@@ -76,6 +76,14 @@ int main(int argc, char** argv) {
         std::cout << "All weights loaded successfully!\n";
 
 
+        {
+            // DEBUG SCRIPT FOR AIDER
+
+
+            return 0;
+        }
+
+
         int N = 8;
         std::vector<int> tokens = {
             15496, 11, 314, 1101, 257, 3303, 2746, 13
