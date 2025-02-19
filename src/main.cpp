@@ -65,6 +65,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    int mode; 
+    std::cout << "type 0 for pre-loaded weight inference, type 1 for training " << std::endl;
+    std::cin >> mode;
+
+    if (mode == 1) {
+        // training loop here 
+        GPTConfig config;
+        ModelWeights model(config);
+        model.init_data_random();
+
+        
+
+        return 0;
+    } 
+
     try {
         // Initialize config with default values
         GPTConfig config;
@@ -75,8 +90,12 @@ int main(int argc, char** argv) {
         weights.load_weights(argv[1]);
         std::cout << "All weights loaded successfully!\n";
 
+// lol this will come later 
+#ifdef DO_QUANTIZE_DEBUG
         {
             // DEBUG SCRIPT FOR AIDER
+
+            // We might use this in quantization later. 
 
             // Aggregate min and max values for all weights
             float min_weight = std::numeric_limits<float>::max();
@@ -136,8 +155,9 @@ int main(int argc, char** argv) {
             std::cout << "Min weight: " << min_weight << ", Max weight: " << max_weight << "\n";
             std::cout << "Min bias: " << min_bias << ", Max bias: " << max_bias << "\n";
 
-            return 0;
+            // return 0;
         }
+#endif 
 
         int N = 8;
         std::vector<int> tokens = {

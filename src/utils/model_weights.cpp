@@ -1,9 +1,13 @@
 #include "utils/model_weights.hpp"
 #include "utils/weight_utils.hpp"
 #include <filesystem>
+#include <random>
 
 namespace fs = std::filesystem;
 
+ModelWeights::ModelWeights(const GPTConfig& config) : _config(config) {
+    _h.resize(config.n_layer);
+}
 
 /*
     SOME TENSORS RANDOMLY NEED TRANSPOSITION!!!
@@ -22,8 +26,75 @@ fs::path operator+(fs::path path, T&& data)
     return path;
 }
 
-ModelWeights::ModelWeights(const GPTConfig& config) : _config(config) {
-    _h.resize(config.n_layer);
+
+void assert_linear(const Linear& input, int in_dim, int out_dim, std::string name) {
+    weight_utils::assert_tensor_shape(input.weight, in_dim, out_dim, name);
+    weight_utils::assert_vector_shape(input.bias, out_dim, name);
+}
+
+void assert_layer_norm(const LayerNormWeights& input, int size, std::string name) {
+    weight_utils::assert_vector_shape(input.gamma, size, name);
+    weight_utils::assert_vector_shape(input.beta, size, name);
+}
+
+Eigen::MatrixXf random_2d(int rows, int cols, float mean = 0, float stddev = 0.2) {
+    Eigen::MatrixXf res(rows, cols);
+
+    std::mt19937 rng;
+    std::normal_distribution<> nd(mean, stddev);
+
+    for (int i = 0; i < rows; ++i) for (int j = 0; j < cols; ++j) {
+        res(i, j) = nd(rng);
+    }
+
+    return res;
+}
+
+Eigen::RowVectorXf random_1d(int size, float mean = 0, float stddev = 0.2) {
+    Eigen::RowVectorXf res(size);
+
+    std::mt19937 rng;
+    std::normal_distribution<> nd(mean, stddev);
+
+    for (int i = 0; i < size; ++i) {
+        res(i) = nd(rng);
+    }
+
+    return res;
+}
+
+Linear random_linear(int rows, int cols, float mean = 0, float stddev = 0.2) {
+    return Linear{
+        .weight = random_2d(rows, cols),
+        .bias = random_1d(cols)
+    };
+}
+
+LayerNormWeights random_ln(int size, float mean = 0, float stddev = 0.2) {
+    return LayerNormWeights{
+        .gamma = random_1d(size),
+        .beta = random_1d(size)
+    };
+}
+
+void ModelWeights::init_data_random() {
+    _wte = random_2d(config().vocab_size, config().n_embd);
+    _wpe = random_2d(config().block_size, config().n_embd);
+
+    for (int layer_idx = 0; layer_idx < _config.n_layer; ++layer_idx) {
+        auto& block = _h[layer_idx];
+
+        block.attn.qkv = random_linear(config().n_embd, config().n_embd * 3);
+        block.attn.c_proj = random_linear(config().n_embd, config().n_embd);
+
+        block.mlp.to_up = random_linear(config().n_embd, config().n_embd * 4);
+        block.mlp.back_down = random_linear(config().n_embd * 4, config().n_embd);
+
+        block.ln_1 = random_ln(config().n_embd);
+        block.ln_2 = random_ln(config().n_embd);
+    }
+
+    _ln_f = random_ln(config().n_embd);
 }
 
 void ModelWeights::load_weights(const fs::path& dir_path) {
@@ -52,15 +123,6 @@ void ModelWeights::load_embeddings(const fs::path& dir_path) {
     }
 }
 
-void assert_linear(const Linear& input, int in_dim, int out_dim, std::string name) {
-    weight_utils::assert_tensor_shape(input.weight, in_dim, out_dim, name);
-    weight_utils::assert_vector_shape(input.bias, out_dim, name);
-}
-
-void assert_layer_norm(const LayerNormWeights& input, int size, std::string name) {
-    weight_utils::assert_vector_shape(input.gamma, size, name);
-    weight_utils::assert_vector_shape(input.beta, size, name);
-}
 
 void ModelWeights::load_transformer_block(int layer_idx, const fs::path& dir_path) {
     try {

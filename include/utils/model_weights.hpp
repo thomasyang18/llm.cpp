@@ -12,6 +12,8 @@ public:
     // Load all weights from directory
     void load_weights(const std::filesystem::path& dir_path);
 
+    void init_data_random();
+
     // Getters for different components
     const Eigen::MatrixXf& wte() const { return _wte; }
     const Eigen::MatrixXf& wpe() const { return _wpe; }
