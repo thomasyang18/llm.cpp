@@ -27,7 +27,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
 
     // Forward pass to get intermediate activations
     Eigen::MatrixXf x(input_tokens.size(), model().config().n_embd);
-    
+
     for (int i = 0; i < input_tokens.size(); ++i) {
         x.row(i) = model().wte().row(input_tokens[i]) + model().wpe().row(i);
     }
@@ -57,8 +57,25 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
 
     Eigen::MatrixXf x_ln_f = layer_norm(x, model().ln_f());
 
+    // Calculate loss
+    float loss = 0.0f;
+    for (int i = 0; i < loss_tokens.size(); ++i) {
+        Eigen::RowVectorXf logits = x_ln_f.row(i) * model().lm_head().transpose();
+        Eigen::RowVectorXf probs = softmax(logits);
+        loss -= std::log(probs(loss_tokens[i]));
+    }
+    loss /= loss_tokens.size();
+
     // Backward pass
-    Eigen::MatrixXf dx = ; // ?
+    Eigen::MatrixXf dx = Eigen::MatrixXf::Zero(x_ln_f.rows(), x_ln_f.cols());
+    for (int i = 0; i < loss_tokens.size(); ++i) {
+        Eigen::RowVectorXf logits = x_ln_f.row(i) * model().lm_head().transpose();
+        Eigen::RowVectorXf probs = softmax(logits);
+        Eigen::RowVectorXf dlogits = probs;
+        dlogits(loss_tokens[i]) -= 1.0f;
+        dx.row(i) = dlogits * model().lm_head();
+    }
+    dx /= loss_tokens.size();
 
     for (int i = model().blocks().size() - 1; i >= 0; --i) {
         const auto& block = model().blocks()[i];
