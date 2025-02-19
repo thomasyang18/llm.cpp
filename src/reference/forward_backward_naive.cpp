@@ -80,12 +80,12 @@ int Forward_BackwardNaive::forward(std::vector<int> tokens) {
             model().wpe().row(i);
     }
 
-    // Karpathy does this I ll do the same 
+    // Karpathy does this I ll do the same
     // Okay.... adding these for some reason drastically changed inference.
     // I feel like that obviously means something is wrong, no? but what do I know.
     // for (int i = tokens.size(); i < model().config().block_size; ++i) {
-    //     x.row(i) = 
-    //         model().wte().row(50256) + 
+    //     x.row(i) =
+    //         model().wte().row(50256) +
     //         model().wpe().row(i);
     // }
 
@@ -129,23 +129,49 @@ int Forward_BackwardNaive::forward(std::vector<int> tokens) {
     return sampled_token;
 }
 
-/*
-I always found it weird that you batched attention.
+void Forward_BackwardNaive::backward(std::vector<int> tokens) {
+    assert(tokens.size() > 1 && "Need at least two tokens for backward pass");
 
-Furthermore, the embedding vectors themselves scale scale as a factor of like, n_heads
-with this implementation.
+    std::vector<int> input_tokens(tokens.begin(), tokens.end() - 1);
+    int target_token = tokens.back();
 
-I would've thought that passing the same embedding vector through the thing, with same number of dimensions
-(64), would be far more conductive to it?
+    // Forward pass to get intermediate activations
+    Eigen::MatrixXf x(input_tokens.size(), model().config().n_embd);
+    for (int i = 0; i < input_tokens.size(); ++i) {
+        x.row(i) = model().wte().row(input_tokens[i]) + model().wpe().row(i);
+    }
 
-Oh wait, nvm. I see.
+    std::vector<Eigen::MatrixXf> activations;
+    activations.push_back(x);
 
-> does wte and the final reverse projection, do they like, both learn as well?
-> or are they given from some basic  token -> projection model e.g. are they constant.
-> cuz i find it weird that they are [vocab_size x (n_embed * n_heads)] implicitly,
-> but if they learn alongside the model then it makes more sense.
-> if so, interesting how they weight tie
-*/
+    for (const auto& block : model().blocks()) {
+        x = layer_norm(x, block.ln_1);
+        activations.push_back(x);
+        x = causal_self_attention(x, block.attn);
+        activations.push_back(x);
+        x = layer_norm(x, block.ln_2);
+        activations.push_back(x);
+        x = mlp(x, block.mlp);
+        activations.push_back(x);
+    }
+
+    x = layer_norm(x, model().ln_f());
+    activations.push_back(x);
+
+    // Backward pass
+    Eigen::MatrixXf dx = (x * model().lm_head().transpose()).row(input_tokens.size() - 1);
+    dx = dx - model().wte().row(target_token);
+
+    for (int i = model().blocks().size() - 1; i >= 0; --i) {
+        const auto& block = model().blocks()[i];
+
+        backward_layer_norm(dx, activations[4 * i + 3], block.ln_2, activations[4 * i + 4]);
+        backward_mlp(dx, activations[4 * i + 2], block.mlp, activations[4 * i + 3]);
+
+        backward_layer_norm(dx, activations[4 * i + 1], block.ln_1, activations[4 * i + 2]);
+        backward_causal_self_attention(dx, activations[4 * i], block.attn, activations[4 * i + 1], _dattn_scores[i], _dattn_values[i]);
+    }
+}
 
 // I'm on ubuntu 20.04, so I do not have access to Eigen::reshaped or Eigen::transpose(axis1, axis2).
 // I'm upgrading to a new computer soon anyways... sad. Not really gonna try bother manually
@@ -208,12 +234,12 @@ Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, 
 
     /*
         Okay I should probably try to understand the actual transpose magic going on when implementing attention, but for a first pass
-        this isn't so bad. 
+        this isn't so bad.
 
         From what I understand, the "actual" embeddings are just C / n_heads long.
-        Partition into blocks of [T, actual_embd]. 
+        Partition into blocks of [T, actual_embd].
 
-        Then operate on those indivdually. Am I correct? 
+        Then operate on those indivdually. Am I correct?
     */
 
     for (int h = 0; h < n_head; h++) {
@@ -233,7 +259,7 @@ Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, 
 
         // // 6. Apply a causal mask: for each row i, zero out (or set to -infinity) any column j > i.
         // //    Here we loop over rows and columns.
-        // recall that att(i, j) is how much token i attends to token j. 
+        // recall that att(i, j) is how much token i attends to token j.
         for (int i = 0; i < T; i++) {
             for (int j = i + 1; j < T; j++) {
                 att_h(i, j) = -std::numeric_limits<float>::infinity();
@@ -311,14 +337,30 @@ float _gelu(float x) {
 Eigen::MatrixXf Forward_BackwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
 
 /*
-    Any time you do any operation on a matrix, it's not "persistent", I think. 
+    Any time you do any operation on a matrix, it's not "persistent", I think.
     Like, if I call x.unaryExpr(&_gelu), it's not gonna do anything until I save it to somewhere (save it back to x, for example).
     Interesting. Makes sense. Values are OP, but you want the speed of references somehow...
 */
 
 /*
-    Lesson learned, wow. 
+    Lesson learned, wow.
     "x.row(i).dot(ln.gamma);"
-    This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i). 
+    This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i).
     Fair. That did look sus to me...
 */
+
+void Forward_BackwardNaive::backward_causal_self_attention(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const AttentionWeights& attn, const Eigen::MatrixXf& attn_out, const Eigen::MatrixXf& attn_scores, const Eigen::MatrixXf& attn_values) {
+    // TODO: Implement backward pass for causal self-attention
+}
+
+void Forward_BackwardNaive::backward_mlp(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const MLPWeights& mlp, const Eigen::MatrixXf& mlp_out) {
+    // TODO: Implement backward pass for MLP
+}
+
+void Forward_BackwardNaive::backward_layer_norm(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const LayerNormWeights& ln, const Eigen::MatrixXf& ln_out) {
+    // TODO: Implement backward pass for layer normalization
+}
+
+void Forward_BackwardNaive::backward_gelu(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const Eigen::MatrixXf& gelu_out) {
+    // TODO: Implement backward pass for GELU activation
+}
