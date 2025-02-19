@@ -6,63 +6,18 @@
 
 #include <iostream>
 
-template<typename T>
-bool assert_not_nan(T container) {
-#ifdef DEBUG
-    for (int i = 0; i < container.rows(); ++i) {
-        for (int j = 0; j < container.cols(); ++j) {
-            if (container(i, j) != container(i, j)) return false;
-        }
-    }
-#endif
-    return true;
-}
+Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model) {}
+
+// Forwards a single stream of tokens, returns a single token.
+int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route 
+
+// =============== START OF MODEL ===============
 
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
     return exp_logits / exp_logits.sum();
 }
 
-namespace sampling {
-
-    int top_k_sample(const Eigen::RowVectorXf& logits, int k) {
-        // Step 1: Apply softmax
-        Eigen::RowVectorXf probs = softmax(logits);
-
-        // Step 2: Create a vector of indices sorted by probability (descending)
-        std::vector<int> sorted_indices(probs.cols());
-        std::iota(sorted_indices.begin(), sorted_indices.end(), 0);  // Create a list of indices [0, 1, 2, ..., vocab_size-1]
-
-        // Sort indices based on their corresponding probability values in descending order
-        std::sort(sorted_indices.begin(), sorted_indices.end(), [&](int a, int b) {
-            return probs[a] > probs[b];
-        });
-
-        // Step 3: Top-k random sampling
-        // Take the top-k highest probabilities
-        std::vector<int> top_k_indices(sorted_indices.begin(), sorted_indices.begin() + k);
-
-        // Create a discrete distribution based on the top-k probabilities
-        std::vector<float> top_k_probs(top_k_indices.size());
-        for (size_t i = 0; i < top_k_indices.size(); ++i) {
-            top_k_probs[i] = probs[top_k_indices[i]];
-        }
-
-        std::discrete_distribution<> dist(top_k_probs.begin(), top_k_probs.end());
-
-        std::mt19937 gen(std::random_device{}());
-        int sampled_index = dist(gen);
-
-        int sampled_token = top_k_indices[sampled_index];
-
-        return sampled_token;
-    }
-}
-
-Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model) {}
-
-// Forwards a single stream of tokens, returns a single token.
-int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route 
 
 void Forward_BackwardNaive::backward(std::vector<int> tokens) {
     assert(tokens.size() > 1 && "Need at least two tokens for backward pass");
@@ -115,81 +70,42 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
 };
 
 Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
-    // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
     int T = x.rows();
     int C = x.cols();
-    // assert(T == model().config().block_size);
+
     int n_head = model().config().n_head;
 
     assert(C % n_head == 0);
     int head_dim = C / n_head; // Each head gets C/n_head features
 
-    // 1. Compute qkv: project x with weight and add bias.
-    //    attn.c_attn_weight should have shape [C, 3*C] and attn.c_attn_bias shape [3*C].
-    //    The result qkv is of shape [T, 3*C].
-
     Eigen::MatrixXf qkv = forward_linear(x, attn.qkv);
 
-    // 2. Split qkv into q, k, v. Each will have shape [T, C].
     Eigen::MatrixXf q = qkv.leftCols(C);
     Eigen::MatrixXf k = qkv.middleCols(C, C);
     Eigen::MatrixXf v = qkv.rightCols(C);
 
-    // 3. Prepare an output accumulator for all heads.
     Eigen::MatrixXf y(T, C);
-    y.setZero();
-
-    assert(assert_not_nan(q) && " q matrix");
-    assert(assert_not_nan(k) && " k matrix");
-    assert(assert_not_nan(v) && " v matrix");
-
-    /*
-        Okay I should probably try to understand the actual transpose magic going on when implementing attention, but for a first pass
-        this isn't so bad.
-
-        From what I understand, the "actual" embeddings are just C / n_heads long.
-        Partition into blocks of [T, actual_embd].
-
-        Then operate on those indivdually. Am I correct?
-    */
 
     for (int h = 0; h < n_head; h++) {
-        // Extract block corresponding to head h.
-        // Each block has shape [T, head_dim].
         Eigen::MatrixXf q_h = q.middleCols(h * head_dim, head_dim);
         Eigen::MatrixXf k_h = k.middleCols(h * head_dim, head_dim);
         Eigen::MatrixXf v_h = v.middleCols(h * head_dim, head_dim);
 
-        // 5. Compute the attention scores for head h.
-        //    att_h = q_h * k_h^T, so att_h has shape [T, T].
         Eigen::MatrixXf att_h = q_h * k_h.transpose();
 
-        // Scale the attention scores by sqrt(head_dim)
         float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
         att_h *= scale;
 
-        // // 6. Apply a causal mask: for each row i, zero out (or set to -infinity) any column j > i.
-        // //    Here we loop over rows and columns.
-        // recall that att(i, j) is how much token i attends to token j.
         for (int i = 0; i < T; i++) {
             for (int j = i + 1; j < T; j++) {
                 att_h(i, j) = -std::numeric_limits<float>::infinity();
             }
         }
 
-        // 7. Apply softmax to each row of att_h.
-        //    For numerical stability, subtract the max in each row before exponentiating.
         for (int i = 0; i < T; i++) att_h.row(i) = softmax(att_h.row(i));
-
-        // 8. Compute the weighted sum of the values: out_h = att_h * v_h.
-        //    out_h has shape [T, head_dim].
         Eigen::MatrixXf out_h = att_h * v_h;
-
-        // 9. Write out_h into the appropriate middleCols of the output y.
         y.middleCols(h * head_dim, head_dim) = out_h;
     }
-
-    assert(assert_not_nan(y) && " before attention projection ");
 
     y = forward_linear(y, attn.c_proj);
     return y;
