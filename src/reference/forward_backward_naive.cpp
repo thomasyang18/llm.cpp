@@ -11,6 +11,39 @@ Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model
 // Forwards a single stream of tokens, returns a single token.
 int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route
 
+// =============== START OF ALL BACKWARDS FUNCTIONS ===========
+
+Eigen::MatrixXf Forward_BackwardNaive::backward_layer_norm(const Eigen::MatrixXf& gradient, const Eigen::MatrixXf& x, LayerNormWeights& ln) {
+    constexpr float eps = 1e-5;
+
+    Eigen::MatrixXf result(x.rows(), x.cols());
+
+    // Again break it down per token so its explicit, IMO.
+    for (int i = 0; i < x.rows(); ++i) {
+        float n = x.cols();
+
+        float mean = x.row(i).mean();
+        float variance = (x.row(i).array() - mean).square().sum() / n;
+        float denom = 1.0f / std::sqrt(variance + eps);
+
+        float dvar = 
+        float dmean = 
+
+        // this derivative is given by GPT 
+        result.row(i) = gradient.array() * denom + 
+                        (x.row(i).array() - mean) * dvar * (2 / n) + 
+                        dmean / n;
+    }
+
+    for (int i = 0; i < x.rows(); ++i) {
+        // For a single element, it's just 1; so this just works 
+        ln.beta += gradient.row(i);
+        ln.gamma += gradient.row(i).array() * x.row(i).array();
+    }
+
+    return result;
+}
+
 // =============== START OF MODEL ===============
 
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
@@ -20,73 +53,183 @@ Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
 
 
 void Forward_BackwardNaive::backward(std::vector<int> tokens) {
-    assert(tokens.size() > 1 && "Need at least two tokens for backward pass");
+    // We assume tokens.size() >= 2.
+    // For training we use the first N-1 tokens as input and tokens[1...N-1] as targets.
+    assert(tokens.size() >= 2 && "Need at least two tokens for training.");
+    int L = tokens.size() - 1; // number of predictions
 
-    std::vector<int> input_tokens(tokens.begin(), tokens.end() - 1);
-    std::vector<int> loss_tokens(tokens.begin() + 1, tokens.end());
-
-    // Forward pass to get intermediate activations
-    Eigen::MatrixXf x(input_tokens.size(), model().config().n_embd);
-
-    for (int i = 0; i < input_tokens.size(); ++i) {
-        x.row(i) = model().wte().row(input_tokens[i]) + model().wpe().row(i);
+    // -------------------------------
+    // 1. Forward Pass (Training Mode)
+    // -------------------------------
+    // Compute embeddings and add position embeddings.
+    Eigen::MatrixXf x(L, model().config().n_embd);
+    for (int i = 0; i < L; ++i) {
+        x.row(i) = model().wte().row(tokens[i]) + model().wpe().row(i);
     }
 
-    // Eigen::MatrixXf x_embed = x;
+    // We save all necessary intermediate activations per transformer block.
+    struct BlockActivations {
+        Eigen::MatrixXf x_in;    // Input to block.
+        Eigen::MatrixXf ln1_out; // Output of first layer norm.
+        Eigen::MatrixXf attn_out;// Output of causal self-attention.
+        Eigen::MatrixXf res1;    // After first residual: x_in + attn_out.
+        Eigen::MatrixXf ln2_out; // Output of second layer norm.
+        Eigen::MatrixXf mlp_out; // Output of the MLP.
+        Eigen::MatrixXf x_out;   // Block output: res1 + mlp_out.
+    };
+    std::vector<BlockActivations> acts;
+    acts.reserve(model().blocks().size());
 
-    std::vector<std::vector<Eigen::MatrixXf>> activations;
+    // Loop over each transformer block.
+    for (const auto& block : model().blocks()) {
+        BlockActivations act;
+        act.x_in = x;  // Save the input to the block.
 
-    for (int i = 0; i < model().blocks().size(); ++i) {
-        activations.emplace_back(5); // vector of length 5
+        // ---- First branch: LN1 + Attention ----
+        act.ln1_out = layer_norm(x, block.ln_1);
+        act.attn_out = causal_self_attention(act.ln1_out, block.attn);
+        // Residual connection: add the attention output back.
+        act.res1 = x + act.attn_out;
 
-        const auto& block = model().blocks()[i];
+        // ---- Second branch: LN2 + MLP ----
+        act.ln2_out = layer_norm(act.res1, block.ln_2);
+        act.mlp_out = mlp(act.ln2_out, block.mlp);
+        // Residual connection.
+        x = act.res1 + act.mlp_out;
+        act.x_out = x;
 
-        Eigen::MatrixXf x_ln1 = layer_norm(x, block.ln_1);
-        Eigen::MatrixXf x_attn = causal_self_attention(x_ln1, block.attn);
-        Eigen::MatrixXf x_ln2 = layer_norm(x_attn, block.ln_2);
-        Eigen::MatrixXf x_mlp = mlp(x_ln2, block.mlp);
-
-        activations[i][0] = x;
-        activations[i][1] = x_ln1;
-        activations[i][2] = x_attn;
-        activations[i][3] = x_ln2;
-        activations[i][4] = x_mlp;
-
-        x = x_mlp;
+        acts.push_back(act);
     }
 
-    Eigen::MatrixXf x_ln_f = layer_norm(x, model().ln_f());
+    // Final layer norm.
+    Eigen::MatrixXf x_final = layer_norm(x, model().ln_f());
 
-    // Calculate loss
     float loss = 0.0f;
-    for (int i = 0; i < loss_tokens.size(); ++i) {
-        Eigen::RowVectorXf logits = x_ln_f.row(i) * model().lm_head().transpose();
-        Eigen::RowVectorXf probs = softmax(logits);
-        loss -= std::log(probs(loss_tokens[i]));
+
+
+    /*
+        For Unsloth HuggingFace stuff, we want to explicitly forbid O(NV) memory.
+        This both clarifies that:
+
+        1 - This is possible
+        2 - Explicitly breaks up the derivatives so that it makes sense.
+
+        (I only proved the apply_wte_deriv, but I'll just take apply_x_deriv as true... "seems legit" kinda argument lmfao)
+    */
+
+    /*
+        So again, to avoid materializing O(N x V) memory, we will do a 'complete skip' of the backwards layer.
+
+        Skip size = 1.
+    */
+
+    Eigen::MatrixXf current_gradient(L, model().config().n_embd);
+
+    {
+        // we apply this to wte deriv
+        Eigen::MatrixXf apply_wte_deriv(model().config().n_embd, model().config().n_layer);
+        apply_wte_deriv.setZero();
+
+        // Again, we can do any sliding window # of iterations to materialize at most O(slide * V) memory.
+        // Probably slide = n_embd should be good, since the max vector size anywyas is O(e * V)? Or anything smaller. 
+        // But **for clarity**, slide = 1.
+
+        for (int i = 0; i < L; ++i) {
+            // For token i, the target is tokens[i+1].
+            int target = tokens[i + 1];
+
+            Eigen::RowVectorXf loss_vec = softmax(
+                x_final.row(i) *
+                model().lm_head().transpose());
+
+            loss -= std::log(loss_vec(target));
+            
+            // this is just how softmax works
+            loss_vec(target) -= 1.0f;
+
+            // Now, vector has to be averaged, before adding to saved_weight_app
+            loss_vec /= L; 
+
+            apply_wte_deriv += x_final.row(i).transpose() * loss_vec; // becomes [e x V vector]. All are scaled down implicitly.
+            current_gradient.row(i) = x_final.row(i) * model().wte(); // (N x V) x (V x e). All are scaled down implicitly too. 
+        }
+        loss /= L;
     }
-    loss /= loss_tokens.size();
 
-    // Backward pass
-    Eigen::MatrixXf dx = Eigen::MatrixXf::Zero(x_ln_f.rows(), x_ln_f.cols());
-    for (int i = 0; i < loss_tokens.size(); ++i) {
-        Eigen::RowVectorXf logits = x_ln_f.row(i) * model().lm_head().transpose();
-        Eigen::RowVectorXf probs = softmax(logits);
-        Eigen::RowVectorXf dlogits = probs;
-        dlogits(loss_tokens[i]) -= 1.0f;
-        dx.row(i) = dlogits * model().lm_head();
+    current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, x_final, _model._ln_f);
+
+
+
+    // -------------------------------
+    // 4. Backpropagation through Transformer Blocks (in reverse)
+    // -------------------------------
+    // Process blocks in reverse order.
+    for (int bi = static_cast<int>(model().blocks().size()) - 1; bi >= 0; --bi) {
+        const auto& block = model().blocks()[bi];
+        const auto& act = acts[bi];
+
+        // --- Block structure reminder ---
+        //   x_in      : input to block.
+        //   ln1_out   : = layer_norm(x_in, ln_1)
+        //   attn_out  : = causal_self_attention(ln1_out, attn)
+        //   res1      : = x_in + attn_out
+        //   ln2_out   : = layer_norm(res1, ln_2)
+        //   mlp_out   : = mlp(ln2_out, mlp)
+        //   x_out     : = res1 + mlp_out
+        //
+        // In the forward pass, the residual additions mean that the gradient flowing into x_out
+        // splits equally into the two “branches.”
+
+        // Start with the gradient d_x coming in for x_out.
+        // Because x_out = res1 + mlp_out, we have:
+        //   d_res1 (from residual addition) = d_x,
+        //   d_mlp_out = d_x.
+        Eigen::MatrixXf d_res1 = d_x;
+        Eigen::MatrixXf d_mlp_out = d_x;
+
+        // ---- Backprop through the MLP branch ----
+        // mlp_out = mlp(ln2_out, block.mlp)
+        Eigen::MatrixXf d_ln2 = backward_mlp(d_mlp_out, act.ln2_out, block.mlp, act.mlp_out);
+
+        // Backprop through LN2.
+        Eigen::MatrixXf d_res1_from_ln2 = backward_layer_norm(d_ln2, act.res1, block.ln_2, act.ln2_out);
+        // Combine gradients arriving at res1.
+        d_res1 += d_res1_from_ln2;
+
+        // ---- Backprop through the residual that formed res1 ----
+        // Since res1 = x_in + attn_out, the gradient splits:
+        //   d_x_in (from the addition) = d_res1,
+        //   d_attn (from the attention branch) = d_res1.
+        Eigen::MatrixXf d_x_in = d_res1;
+        Eigen::MatrixXf d_attn = d_res1;
+
+        // ---- Backprop through the causal self-attention branch ----
+        // attn_out = causal_self_attention(ln1_out, block.attn)
+        Eigen::MatrixXf d_ln1 = backward_causal_self_attention(d_attn, act.ln1_out, block.attn, act.attn_out /*, plus any extra buffers */);
+
+        // ---- Backprop through LN1 ----
+        // ln1_out = layer_norm(x_in, block.ln_1)
+        Eigen::MatrixXf d_x_in_from_ln1 = backward_layer_norm(d_ln1, act.x_in, block.ln_1, act.ln1_out);
+
+        // Total gradient for block input.
+        d_x = d_x_in + d_x_in_from_ln1;
     }
-    dx /= loss_tokens.size();
 
-    for (int i = model().blocks().size() - 1; i >= 0; --i) {
-        const auto& block = model().blocks()[i];
-
-        backward_layer_norm(dx, activations[i][4], block.ln_2, activations[i][3]);
-        backward_mlp(dx, activations[i][3], block.mlp, activations[i][4]);
-
-        backward_layer_norm(dx, activations[i][2], block.ln_1, activations[i][3]);
-        backward_causal_self_attention(dx, activations[i][1], block.attn, activations[i][2], _dattn_scores[i], _dattn_values[i]);
-    }
+    // -------------------------------
+    // 5. Backpropagation to Embeddings
+    // -------------------------------
+    // Now d_x has shape (L, n_embd) – one gradient per input token.
+    // Here you would accumulate gradients for the token embedding (wte) and positional embedding (wpe) matrices.
+    // For example:
+    // for (int i = 0; i < L; ++i) {
+    //     accumulate_grad(model().wte(), tokens[i], d_x.row(i));
+    //     accumulate_grad(model().wpe(), i, d_x.row(i));
+    // }
+    // (The accumulation mechanism is not shown here.)
 }
+
+
+// START OF ALL FORWARD FUNCTIONS
 
 Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     x = x * linear.weight;
@@ -162,19 +305,3 @@ float _gelu(float x) {
 }
 
 Eigen::MatrixXf Forward_BackwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
-
-void Forward_BackwardNaive::backward_causal_self_attention(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const AttentionWeights& attn, const Eigen::MatrixXf& attn_out, const Eigen::MatrixXf& attn_scores, const Eigen::MatrixXf& attn_values) {
-    // TODO: Implement backward pass for causal self-attention
-}
-
-void Forward_BackwardNaive::backward_mlp(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const MLPWeights& mlp, const Eigen::MatrixXf& mlp_out) {
-    // TODO: Implement backward pass for MLP
-}
-
-void Forward_BackwardNaive::backward_layer_norm(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const LayerNormWeights& ln, const Eigen::MatrixXf& ln_out) {
-    // TODO: Implement backward pass for layer normalization
-}
-
-void Forward_BackwardNaive::backward_gelu(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const Eigen::MatrixXf& gelu_out) {
-    // TODO: Implement backward pass for GELU activation
-}

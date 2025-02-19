@@ -24,11 +24,11 @@ public:
     const LayerNormWeights& ln_f() const { return _ln_f; }
 
     // weight tying
-    const Eigen::MatrixXf& lm_head() const {return _wte; }
+    const Eigen::MatrixXf& lm_head() const {return _wte.transpose(); }
 
     const GPTConfig& config() const {return _config; }
 
-    friend class FriendClass; // this is so that I can train weights (e..g modify)
+    friend class Forward_BackwardNaive; // this is so that I can train weights (e..g modify)
 private:
     const GPTConfig& _config;
 
