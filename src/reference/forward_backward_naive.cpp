@@ -16,7 +16,7 @@ bool assert_not_nan(T container) {
     }
 #endif
     return true;
-};
+}
 
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
