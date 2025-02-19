@@ -26,17 +26,17 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_layer_norm(const Eigen::MatrixXf
         float variance = (x.row(i).array() - mean).square().sum() / n;
         float denom = 1.0f / std::sqrt(variance + eps);
 
-        float dvar = 
-        float dmean = 
+        float dvar = (gradient.row(i).array() * (x.row(i).array() - mean) * -0.5f * std::pow(denom, 3)).sum();
+        float dmean = (gradient.row(i).array() * -denom).sum() + dvar * (-2.0f / n) * (x.row(i).array() - mean).sum();
 
-        // this derivative is given by GPT 
-        result.row(i) = gradient.array() * denom + 
-                        (x.row(i).array() - mean) * dvar * (2 / n) + 
+        // this derivative is given by GPT
+        result.row(i) = gradient.array() * denom +
+                        (x.row(i).array() - mean) * dvar * (2 / n) +
                         dmean / n;
     }
 
     for (int i = 0; i < x.rows(); ++i) {
-        // For a single element, it's just 1; so this just works 
+        // For a single element, it's just 1; so this just works
         ln.beta += gradient.row(i);
         ln.gamma += gradient.row(i).array() * x.row(i).array();
     }
@@ -131,7 +131,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
         apply_wte_deriv.setZero();
 
         // Again, we can do any sliding window # of iterations to materialize at most O(slide * V) memory.
-        // Probably slide = n_embd should be good, since the max vector size anywyas is O(e * V)? Or anything smaller. 
+        // Probably slide = n_embd should be good, since the max vector size anywyas is O(e * V)? Or anything smaller.
         // But **for clarity**, slide = 1.
 
         for (int i = 0; i < L; ++i) {
@@ -143,15 +143,15 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
                 model().lm_head().transpose());
 
             loss -= std::log(loss_vec(target));
-            
+
             // this is just how softmax works
             loss_vec(target) -= 1.0f;
 
             // Now, vector has to be averaged, before adding to saved_weight_app
-            loss_vec /= L; 
+            loss_vec /= L;
 
             apply_wte_deriv += x_final.row(i).transpose() * loss_vec; // becomes [e x V vector]. All are scaled down implicitly.
-            current_gradient.row(i) = x_final.row(i) * model().wte(); // (N x V) x (V x e). All are scaled down implicitly too. 
+            current_gradient.row(i) = x_final.row(i) * model().wte(); // (N x V) x (V x e). All are scaled down implicitly too.
         }
         loss /= L;
     }
