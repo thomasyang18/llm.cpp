@@ -59,75 +59,10 @@ namespace sampling {
     }
 }
 
-Forward_BackwardNaive::Forward_BackwardNaive(const ModelWeights& model) : _model(model) {}
+Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model) {}
 
 // Forwards a single stream of tokens, returns a single token.
-int Forward_BackwardNaive::forward(std::vector<int> tokens) {
-    assert(0 < tokens.size() && tokens.size() <= model().config().block_size &&
-        "Passing more tokens than max sequence length.");
-
-    Eigen::MatrixXf x(tokens.size(), model().config().n_embd);
-    // Matrices are not default initialized, unfortunately... Have to intiialize allto zeroes to avoid NAN.
-    // I think masking should save this though? idk.
-    // x.setZero();
-
-    for (int i = 0; i < tokens.size(); ++i) {
-        // We simply index into the tokens[i] vector to retrieve the embedding
-        // (ig more formally, we have a 1 hot vector and do matrix multiply here?)
-        // But this is the easiest way to think about it
-        x.row(i) =
-            model().wte().row(tokens[i]) +
-            model().wpe().row(i);
-    }
-
-    // Karpathy does this I ll do the same
-    // Okay.... adding these for some reason drastically changed inference.
-    // I feel like that obviously means something is wrong, no? but what do I know.
-    // for (int i = tokens.size(); i < model().config().block_size; ++i) {
-    //     x.row(i) =
-    //         model().wte().row(50256) +
-    //         model().wpe().row(i);
-    // }
-
-    // At this step, **X** is a vector representing [# tokens, n_embed]
-
-    // Padded tokens don't matter; TODO specify the proper attention mask
-
-    // Forward through transformer blocks
-    for (const auto& block : model().blocks()) {
-        x = x + causal_self_attention(layer_norm(x, block.ln_1), block.attn);
-        x = x + mlp(layer_norm(x, block.ln_2), block.mlp);
-    }
-
-    // Final layer norm
-    x = layer_norm(x, model().ln_f());
-
-    // One detail I did not realize:
-    // As the model is trained, each position $j$ predicts the position $j + 1$.
-    // So we only want the logits vector at position tokens.size() - 1,
-    // e.g. the last token in out sequence.
-
-    // std::cout << model().lm_head().transpose().rows() << " " <<
-    // model().lm_head().transpose().cols() << std::endl;
-
-    // std:: cout << x.rows() << " " << x.cols() << std::endl;
-
-    // Eigen::RowVectorXf logits(model().config().vocab_size);
-
-    // Surely we can speed this up by being smart but whatever
-
-    // auto res = (x * model().lm_head().transpose());
-
-    // for (int i = 0; i < tokens.size(); ++i) {
-    //     std::cout << "yo mama!" << res.row(i).mean() << std:: endl;
-    // }
-
-    Eigen::RowVectorXf logits = (x * model().lm_head().transpose()).row(tokens.size() - 1);
-
-    int sampled_token = sampling::top_k_sample(logits, model().config().top_k_sample);
-
-    return sampled_token;
-}
+int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route 
 
 void Forward_BackwardNaive::backward(std::vector<int> tokens) {
     assert(tokens.size() > 1 && "Need at least two tokens for backward pass");
@@ -173,35 +108,11 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
     }
 }
 
-// I'm on ubuntu 20.04, so I do not have access to Eigen::reshaped or Eigen::transpose(axis1, axis2).
-// I'm upgrading to a new computer soon anyways... sad. Not really gonna try bother manually
-// updating to Eigen 3.4
-
-/*
-    All 3d>= matrix multiplication is defined like so .
-
-    Matrix(a, b, c, ... X, Y).
-    Matrix(a, b, c, ... Y, Z).
-
-    The first n-2 axes must match up - those are treated as actual "indexing" dimensions.
-
-    E.g. you have a * b * c ... independent matrices.
-
-    Then you just do standard MM on (x, y) (y, z).
-*/
-
-// And today I learned that all vectors in Eigen are column vectors, not row vectors.
-
 Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     x = x * linear.weight;
     x.rowwise() += linear.bias;
     return x;
 };
-
-// This can be significantly sped up in general by just only passing in increments of 1, 2, 3 etc. rather than 1024
-// It's kind of amazing how this architecture just, works... it's not dependent on sequence length at all, which is kind of insane. 
-// (as in, there's no fixed like, size for things. Back when I learned neural nets, you had to have a new neuron or set of neurons)
-// for everything you wanted to encode....
 
 Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
@@ -284,38 +195,14 @@ Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, 
     return y;
 }
 
-/*
-Apparently 4*x MLP internal layer is just a normal thing. I thought it was special;
-no, you just want to map to some higher dimension, and 4*x was good I guess.
-
-Importantly, each token is *independent*. What the MLP actually does is a contract that says
-f(attended token) -> even better token.
-1 token input, 1 token output (recall that a token can be represented by a 1d vector of size [n_embd])
-This way, you alternate between all-pairs learning and a simple MLP that tries to understand words
-sort of just normally.
-
-THEREFORE, what this means is:
-
-Multiplying a matrix of [sequence_length, n_embd] x [n_embd, internal_proj] x [internal_proj, n_embd]
-is a well defined operation that operates **pairwise independently** on all tokens.
-
-To anyone with only a basic understanding of ML (me), this computation might seem weird at first,
-since we usually think of MLPs operating on a single layer of neurons.
-
-We are here, we just add an extra row dimension, and everything works out :)
-*/
-
 Eigen::MatrixXf Forward_BackwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
-    // x is our sequence of context-augmented tokens.
     x = forward_linear(x, mlp.to_up);
     x = gelu(x);
     x = forward_linear(x, mlp.back_down);
     return x;
 }
 
-// Some nice Eigen code here, but overall nothing too scary.
 Eigen::MatrixXf Forward_BackwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
-    // Explicitly write this independently, since I'm not that familiar with layernorm... matrix operations scary
     constexpr float eps = 1e-5;
 
     for (int i = 0; i < x.rows(); ++i) { // iterate over all tokens
@@ -333,21 +220,7 @@ float _gelu(float x) {
     return 0.5f * x * (1.0f + tanhf(GELU_SCALE * (x + cube)));
 }
 
-// aight buddy
 Eigen::MatrixXf Forward_BackwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
-
-/*
-    Any time you do any operation on a matrix, it's not "persistent", I think.
-    Like, if I call x.unaryExpr(&_gelu), it's not gonna do anything until I save it to somewhere (save it back to x, for example).
-    Interesting. Makes sense. Values are OP, but you want the speed of references somehow...
-*/
-
-/*
-    Lesson learned, wow.
-    "x.row(i).dot(ln.gamma);"
-    This does not actually modify x.row(i). The .dot() operation computes the dot product but does not store the result back in x.row(i).
-    Fair. That did look sus to me...
-*/
 
 void Forward_BackwardNaive::backward_causal_self_attention(Eigen::MatrixXf& dx, const Eigen::MatrixXf& x, const AttentionWeights& attn, const Eigen::MatrixXf& attn_out, const Eigen::MatrixXf& attn_scores, const Eigen::MatrixXf& attn_values) {
     // TODO: Implement backward pass for causal self-attention

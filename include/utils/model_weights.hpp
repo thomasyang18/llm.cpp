@@ -5,6 +5,9 @@
 #include <stdexcept>
 #include <filesystem>
 
+// greate c++ code
+class Forward_BackwardNaive;
+
 class ModelWeights {
 public:
     explicit ModelWeights(const GPTConfig& config);
@@ -25,6 +28,7 @@ public:
 
     const GPTConfig& config() const {return _config; }
 
+    friend class FriendClass; // this is so that I can train weights (e..g modify)
 private:
     const GPTConfig& _config;
 

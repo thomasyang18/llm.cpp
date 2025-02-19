@@ -6,16 +6,16 @@
 
 class Forward_BackwardNaive {
 public:
-    Forward_BackwardNaive(const ModelWeights& model);
+    Forward_BackwardNaive(ModelWeights& model);
 
     int forward(std::vector<int> tokens);
 
     void backward(std::vector<int> tokens);
 
-    const ModelWeights& model() { return _model; }
+    ModelWeights& model() { return _model; }
 
 private:
-    const ModelWeights& _model;
+    ModelWeights& _model;
 
     Eigen::MatrixXf causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attention);
     Eigen::MatrixXf mlp(Eigen::MatrixXf x, const MLPWeights& mlp);
