@@ -9,9 +9,9 @@
 
 #include <vector> 
 
-class ForwardNaive {
+class Forward_BackwardNaive {
 public:
-    ForwardNaive(const ModelWeights& model);
+    Forward_BackwardNaive(const ModelWeights& model);
 
     int forward(std::vector<int> tokens);
 

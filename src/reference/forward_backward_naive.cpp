@@ -1,4 +1,4 @@
-#include "reference/forward_naive.hpp"
+#include "reference/forward_backward_naive.hpp"
 #include <cmath>
 #include <cassert>
 #include <numeric>
@@ -59,10 +59,10 @@ namespace sampling {
     }
 }
 
-ForwardNaive::ForwardNaive(const ModelWeights& model) : _model(model) {}
+Forward_BackwardNaive::Forward_BackwardNaive(const ModelWeights& model) : _model(model) {}
 
 // Forwards a single stream of tokens, returns a single token.
-int ForwardNaive::forward(std::vector<int> tokens) {
+int Forward_BackwardNaive::forward(std::vector<int> tokens) {
     assert(0 < tokens.size() && tokens.size() <= model().config().block_size &&
         "Passing more tokens than max sequence length.");
 
@@ -177,7 +177,7 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
 // (as in, there's no fixed like, size for things. Back when I learned neural nets, you had to have a new neuron or set of neurons)
 // for everything you wanted to encode....
 
-Eigen::MatrixXf ForwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
+Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     // x: [T, C] where T = sequence length and C = embedding dimension (n_embd)
     int T = x.rows();
     int C = x.cols();
@@ -279,7 +279,7 @@ since we usually think of MLPs operating on a single layer of neurons.
 We are here, we just add an extra row dimension, and everything works out :)
 */
 
-Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
+Eigen::MatrixXf Forward_BackwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
     // x is our sequence of context-augmented tokens.
     x = forward_linear(x, mlp.to_up);
     x = gelu(x);
@@ -288,7 +288,7 @@ Eigen::MatrixXf ForwardNaive::mlp(Eigen::MatrixXf x, const MLPWeights& mlp) {
 }
 
 // Some nice Eigen code here, but overall nothing too scary.
-Eigen::MatrixXf ForwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
+Eigen::MatrixXf Forward_BackwardNaive::layer_norm(Eigen::MatrixXf x, const LayerNormWeights& ln) {
     // Explicitly write this independently, since I'm not that familiar with layernorm... matrix operations scary
     constexpr float eps = 1e-5;
 
@@ -308,7 +308,7 @@ float _gelu(float x) {
 }
 
 // aight buddy
-Eigen::MatrixXf ForwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
+Eigen::MatrixXf Forward_BackwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }
 
 /*
     Any time you do any operation on a matrix, it's not "persistent", I think. 
