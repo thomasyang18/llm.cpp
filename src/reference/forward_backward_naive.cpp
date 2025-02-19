@@ -23,19 +23,22 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
     assert(tokens.size() > 1 && "Need at least two tokens for backward pass");
 
     std::vector<int> input_tokens(tokens.begin(), tokens.end() - 1);
-    int target_token = tokens.back();
+    std::vector<int> loss_tokens(tokens.begin() + 1, tokens.end());
 
     // Forward pass to get intermediate activations
     Eigen::MatrixXf x(input_tokens.size(), model().config().n_embd);
+    
     for (int i = 0; i < input_tokens.size(); ++i) {
         x.row(i) = model().wte().row(input_tokens[i]) + model().wpe().row(i);
     }
 
-    Eigen::MatrixXf x_embed = x;
+    // Eigen::MatrixXf x_embed = x;
 
-    std::vector<std::vector<Eigen::MatrixXf>> activations(model().blocks().size(), std::vector<Eigen::MatrixXf>(5));
+    std::vector<std::vector<Eigen::MatrixXf>> activations;
 
     for (int i = 0; i < model().blocks().size(); ++i) {
+        activations.emplace_back(5); // vector of length 5
+
         const auto& block = model().blocks()[i];
 
         Eigen::MatrixXf x_ln1 = layer_norm(x, block.ln_1);
@@ -55,8 +58,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
     Eigen::MatrixXf x_ln_f = layer_norm(x, model().ln_f());
 
     // Backward pass
-    Eigen::MatrixXf dx = (x_ln_f * model().lm_head().transpose()).row(input_tokens.size() - 1);
-    dx = dx - model().wte().row(target_token);
+    Eigen::MatrixXf dx = ; // ?
 
     for (int i = model().blocks().size() - 1; i >= 0; --i) {
         const auto& block = model().blocks()[i];
@@ -73,7 +75,7 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     x = x * linear.weight;
     x.rowwise() += linear.bias;
     return x;
-};
+}
 
 Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, const AttentionWeights& attn) {
     int T = x.rows();
