@@ -9,7 +9,7 @@
 Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model) {}
 
 // Forwards a single stream of tokens, returns a single token.
-int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route 
+int Forward_BackwardNaive::forward(std::vector<int> tokens) {assert(false);} // do not go down this route
 
 // =============== START OF MODEL ===============
 
@@ -31,35 +31,41 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens) {
         x.row(i) = model().wte().row(input_tokens[i]) + model().wpe().row(i);
     }
 
-    std::vector<Eigen::MatrixXf> activations;
-    activations.push_back(x);
+    Eigen::MatrixXf x_embed = x;
 
-    for (const auto& block : model().blocks()) {
-        x = layer_norm(x, block.ln_1);
-        activations.push_back(x);
-        x = causal_self_attention(x, block.attn);
-        activations.push_back(x);
-        x = layer_norm(x, block.ln_2);
-        activations.push_back(x);
-        x = mlp(x, block.mlp);
-        activations.push_back(x);
+    std::vector<std::vector<Eigen::MatrixXf>> activations(model().blocks().size(), std::vector<Eigen::MatrixXf>(5));
+
+    for (int i = 0; i < model().blocks().size(); ++i) {
+        const auto& block = model().blocks()[i];
+
+        Eigen::MatrixXf x_ln1 = layer_norm(x, block.ln_1);
+        Eigen::MatrixXf x_attn = causal_self_attention(x_ln1, block.attn);
+        Eigen::MatrixXf x_ln2 = layer_norm(x_attn, block.ln_2);
+        Eigen::MatrixXf x_mlp = mlp(x_ln2, block.mlp);
+
+        activations[i][0] = x;
+        activations[i][1] = x_ln1;
+        activations[i][2] = x_attn;
+        activations[i][3] = x_ln2;
+        activations[i][4] = x_mlp;
+
+        x = x_mlp;
     }
 
-    x = layer_norm(x, model().ln_f());
-    activations.push_back(x);
+    Eigen::MatrixXf x_ln_f = layer_norm(x, model().ln_f());
 
     // Backward pass
-    Eigen::MatrixXf dx = (x * model().lm_head().transpose()).row(input_tokens.size() - 1);
+    Eigen::MatrixXf dx = (x_ln_f * model().lm_head().transpose()).row(input_tokens.size() - 1);
     dx = dx - model().wte().row(target_token);
 
     for (int i = model().blocks().size() - 1; i >= 0; --i) {
         const auto& block = model().blocks()[i];
 
-        backward_layer_norm(dx, activations[4 * i + 3], block.ln_2, activations[4 * i + 4]);
-        backward_mlp(dx, activations[4 * i + 2], block.mlp, activations[4 * i + 3]);
+        backward_layer_norm(dx, activations[i][4], block.ln_2, activations[i][3]);
+        backward_mlp(dx, activations[i][3], block.mlp, activations[i][4]);
 
-        backward_layer_norm(dx, activations[4 * i + 1], block.ln_1, activations[4 * i + 2]);
-        backward_causal_self_attention(dx, activations[4 * i], block.attn, activations[4 * i + 1], _dattn_scores[i], _dattn_values[i]);
+        backward_layer_norm(dx, activations[i][2], block.ln_1, activations[i][3]);
+        backward_causal_self_attention(dx, activations[i][1], block.attn, activations[i][2], _dattn_scores[i], _dattn_values[i]);
     }
 }
 
