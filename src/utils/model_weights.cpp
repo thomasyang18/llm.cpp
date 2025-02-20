@@ -57,7 +57,10 @@ void ModelWeights::verifySizes() {
 
 }
 
-Eigen::MatrixXf random_2d(int rows, int cols, float mean = 0, float stddev = 0.2) {
+#define MEAN 0
+#define STDDEV 0.02
+
+Eigen::MatrixXf random_2d(int rows, int cols, float mean = 0, float stddev = STDDEV) {
     Eigen::MatrixXf res(rows, cols);
 
     std::mt19937 rng;
@@ -70,7 +73,7 @@ Eigen::MatrixXf random_2d(int rows, int cols, float mean = 0, float stddev = 0.2
     return res;
 }
 
-Eigen::RowVectorXf random_1d(int size, float mean = 0, float stddev = 0.2) {
+Eigen::RowVectorXf random_1d(int size, float mean = 0, float stddev = STDDEV) {
     Eigen::RowVectorXf res(size);
 
     std::mt19937 rng;
@@ -83,14 +86,14 @@ Eigen::RowVectorXf random_1d(int size, float mean = 0, float stddev = 0.2) {
     return res;
 }
 
-Linear random_linear(int rows, int cols, float mean = 0, float stddev = 0.2) {
+Linear random_linear(int rows, int cols, float mean = 0, float stddev = STDDEV) {
     return Linear{
         .weight = random_2d(rows, cols, mean, stddev),
         .bias = random_1d(cols, mean, stddev)
     };
 }
 
-LayerNormWeights random_ln(int size, float mean = 0, float stddev = 0.2) {
+LayerNormWeights random_ln(int size, float mean = 0, float stddev = STDDEV) {
     return LayerNormWeights{
         .gamma = random_1d(size, mean, stddev),
         .beta = random_1d(size, mean, stddev)
@@ -101,14 +104,28 @@ void ModelWeights::init_data_random() {
     _wte = random_2d(config().vocab_size, config().n_embd);
     _wpe = random_2d(config().block_size, config().n_embd);
 
+    
+    /*
+        https://youtu.be/l8pRSuU81PU?si=b7uo4niS4_77t_R-&t=4704
+
+        Cancel out variance via 1/sqrt(layers * 2 ) for residuals
+
+        for residuals
+
+        Interesting reason why we still use float16s, and not int8s for training (well aside from precision issues it intuitively maeks sense w/ derivatives but)
+
+        https://youtu.be/l8pRSuU81PU?si=rCD_cgdLn2MkEBvU&t=5177 every neuron is a normal distribution so it sort of 'matches that' thats insane
+    */
+    const float cancel = 1.0 / std::sqrt(config().n_layer * 2);
+
     for (int layer_idx = 0; layer_idx < _config.n_layer; ++layer_idx) {
         auto& block = _h[layer_idx];
 
         block.attn.qkv = random_linear(config().n_embd, config().n_embd * 3);
-        block.attn.c_proj = random_linear(config().n_embd, config().n_embd);
+        block.attn.c_proj = random_linear(config().n_embd, config().n_embd, MEAN, STDDEV * cancel);
 
         block.mlp.to_up = random_linear(config().n_embd, config().n_embd * 4);
-        block.mlp.back_down = random_linear(config().n_embd * 4, config().n_embd);
+        block.mlp.back_down = random_linear(config().n_embd * 4, config().n_embd, MEAN, STDDEV * cancel);
 
         block.ln_1 = random_ln(config().n_embd);
         block.ln_2 = random_ln(config().n_embd);

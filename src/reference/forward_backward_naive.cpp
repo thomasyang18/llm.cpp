@@ -24,12 +24,16 @@ bool assert_not_nan(T container) {
 namespace {
 Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits, bool debug = false) {
     if (debug) {
+        // This proves that EVEN BEFOER we passed to softmax it became nan. WTF???
         std::cout << "WTF " << std::endl;
         for (int i = 0; i < 10; ++i) std::cout << logits(i) << " "; 
         std::cout << std::endl;
     }
 
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
+
+    // assert(exp_logits.sum() > 0);
+
     return exp_logits / exp_logits.sum();
 }
 
@@ -381,10 +385,19 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
         x += residual;
         acts.push_back(act);
+
+        assert_not_nan(act.ln1_in);
+        assert_not_nan(act.attn_in);
+        assert_not_nan(act.ln2_in);
+        assert_not_nan(act.mlp_in);
+
+        assert_not_nan(x);
     }
 
     // Final layer norm.
     Eigen::MatrixXf x_final = layer_norm(x, model().ln_f());
+
+    assert_not_nan(x_final);
 
     float loss = 0.0f;
 
@@ -405,7 +418,9 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
         Skip size = 1.
     */
 
+    // We don't start from [N x V]; again we start frmo [N x e] and do a "fast skip" to avoid materializing [N x V] memory.
     Eigen::MatrixXf current_gradient(L, model().config().n_embd);
+    current_gradient.setZero();
 
     assert_not_nan(model().wpe());
     assert_not_nan(model().wte());
@@ -447,16 +462,20 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
             // For token i, the target is tokens[i+1].
             int target = tokens[i + 1];
 
+            assert_not_nan(model().lm_head());
+            assert_not_nan(x_final.row(i));
+
             Eigen::RowVectorXf loss_vec = softmax(
                 x_final.row(i) *
                 model().lm_head().transpose(), true);
 
-            if (!(loss_vec(target) > 0)) {
+            const float eps = 1e-9;
+            if (!(loss_vec(target) + eps > 0)) {
                 std::cout << "WTF? " << i << " | " << loss_vec(target) << std::endl;
             }
-            assert(loss_vec(target) > 0);
+            assert(loss_vec(target) + eps > 0);
 
-            loss -= std::log(loss_vec(target)); // TODO: should I do this? this is a hack
+            loss -= std::log(loss_vec(target) + eps); // TODO: should I do this? this is a hack
 
             // this is just how softmax works
             loss_vec(target) -= 1.0f;
