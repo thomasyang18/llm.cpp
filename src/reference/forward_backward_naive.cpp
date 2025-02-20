@@ -7,9 +7,28 @@
 #include <iostream>
 
 
-// =============== AUX HELPER FORWARD FUNCTIONS (USEFUL FOR BACKWARDS RECOMP TOO) ===============
 
-Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits) {
+template<typename T>
+bool assert_not_nan(T container) {
+// #ifdef DEBUG
+    for (int i = 0; i < container.rows(); ++i) {
+        for (int j = 0; j < container.cols(); ++j) {
+            if (container(i, j) != container(i, j)) return false;
+        }
+    }
+// #endif
+    return true;
+};
+
+// =============== AUX HELPER FORWARD FUNCTIONS (USEFUL FOR BACKWARDS RECOMP TOO) ===============
+namespace {
+Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits, bool debug = false) {
+    if (debug) {
+        std::cout << "WTF " << std::endl;
+        for (int i = 0; i < 10; ++i) std::cout << logits(i) << " "; 
+        std::cout << std::endl;
+    }
+
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
     return exp_logits / exp_logits.sum();
 }
@@ -18,6 +37,7 @@ Eigen::MatrixXf forward_linear(Eigen::MatrixXf x, const Linear& linear) {
     x = x * linear.weight;
     x.rowwise() += linear.bias;
     return x;
+}
 }
 
 Forward_BackwardNaive::Forward_BackwardNaive(ModelWeights& model) : _model(model) {}
@@ -49,6 +69,11 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_layer_norm(const Eigen::MatrixXf
         result.row(i) = gradient.row(i).array() * denom +
                         (x.row(i).array() - mean) * dvar * (2.0 / n) +
                         dmean / n;
+
+
+        assert(dvar == dvar);
+        assert(dmean == dmean);
+        assert_not_nan(result.row(i));
     }
 
     // Update layer norm parameters gamma and beta
@@ -60,6 +85,7 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_layer_norm(const Eigen::MatrixXf
     return result;
 }
 
+namespace {
 Eigen::MatrixXf backward_linear(const Eigen::MatrixXf& gradient, const Eigen::MatrixXf& input, Linear& linear) {
     // This is inefficeint, but again, for matrices, let's walk step by step.
     // We basically have a projection of vectors here from (a => b).
@@ -67,7 +93,13 @@ Eigen::MatrixXf backward_linear(const Eigen::MatrixXf& gradient, const Eigen::Ma
     // Don't ask me how, don't ask me why. (Okay, I can derive it from scratch ,I can. But it's still genuinely so crazy and unintuitive).
     // Handwavy "oh when you look at 2nd matrix its transposed colwise iter" like nah bro this shit's just insanely clean somehow
 
-    Eigen::MatrixXf result(input.rows(), linear.weight.rows()); // So now we enforce result gradient must be (N x a). 
+    assert(linear.weight.rows() == input.cols());
+
+    // So now we enforce result gradient must be (N x a). 
+    // Or, we just make it equal to input.cols()... dumbfuck.
+    // But still, WHY is linear.weight.rows() NOT JUST input.cols(), like what????
+    Eigen::MatrixXf result(input.rows(), input.cols()); 
+    
     Eigen::MatrixXf weight_grad = Eigen::MatrixXf::Zero(linear.weight.rows(), linear.weight.cols());
     Eigen::RowVectorXf bias_grad = Eigen::RowVectorXf::Zero(linear.bias.size());
 
@@ -75,13 +107,16 @@ Eigen::MatrixXf backward_linear(const Eigen::MatrixXf& gradient, const Eigen::Ma
         // This shit is still magic to me honestly, even though I've derived the matrix dependencies directly. 
         // I have 'intuition' but no I don't really have intuition lmao. 
         // TODO: This is GPT slop, understand (tho it makes more sense since I've done a similar derivation tho)
+        // Okay... GPT had some transpose issue because in its trained code its format wasn't
+        // the same as my weight format.
+        // Sigh.... I'm gonna have to re-derive this from scratch, aren't I?
 
-        // ∇W = gradient^T * input  
-        weight_grad += gradient.row(i).transpose() * input.row(i); 
-        // ∇b = sum of gradients across all tokens
+        // Correct weight gradient: ∇W = input^T * gradient, for each row:
+        weight_grad += input.row(i).transpose() * gradient.row(i);
+        // Correct bias gradient: ∇b = sum over gradient rows
         bias_grad += gradient.row(i);
-        // Propagate gradient backwards: ∇x = gradient * W
-        result.row(i) = gradient.row(i) * linear.weight;
+        // Propagate gradient backwards: ∇x = gradient * weight^T
+        result.row(i) = gradient.row(i) * linear.weight.transpose();
     }
 
     // Update weights & bias (simulating SGD step, though you'd typically scale this in real training)
@@ -102,12 +137,18 @@ float _gelu_derivative(float x) {
     float term1 = 0.5f * (1.0f + tanh_out);
     float term2 = 0.5f * x * sech2 * GELU_SCALE * (1.0f + 3.0f * 0.044715f * x * x);
     
-    return term1 + term2;
+    float res = 
+    term1 + term2;
+
+    assert(res==res); // NOT NAN
+
+    return res;
+}   
 }
 
 Eigen::MatrixXf Forward_BackwardNaive::backward_mlp(const Eigen::MatrixXf& gradient, const Eigen::MatrixXf& input, MLPWeights& mlp) {
     // Recompute partially, because we need inputs here. 
-    Eigen::MatrixXf x = forward_linear(x, mlp.to_up);
+    Eigen::MatrixXf x = forward_linear(input, mlp.to_up);
     x = gelu(x);
 
     // Apply backward linear transformation through the second layer.
@@ -121,6 +162,7 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_mlp(const Eigen::MatrixXf& gradi
     return backward_linear(temp_grad, input, mlp.to_up);
 }
 
+namespace{ 
 // TODO: GPT Pasted slop idk it 
 Eigen::MatrixXf softmax_backward(const Eigen::MatrixXf& dA, const Eigen::MatrixXf& A) {
     Eigen::MatrixXf dS = Eigen::MatrixXf::Zero(A.rows(), A.cols());
@@ -130,7 +172,9 @@ Eigen::MatrixXf softmax_backward(const Eigen::MatrixXf& dA, const Eigen::MatrixX
         float dot = (A.row(i).cwiseProduct(dA.row(i))).sum();
         dS.row(i) = A.row(i).cwiseProduct(dA.row(i) - Eigen::RowVectorXf::Constant(A.cols(), dot));
     }
+    assert_not_nan(dS);
     return dS;
+}
 }
 
 Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
@@ -147,6 +191,11 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
 
     // === Forward Recompute for QKV ===
     // Compute combined QKV from input; shape: (n, 3*n_embd)
+
+    // std::cout << "WTF " << input.rows() << " " << input.cols() << " " << std::endl;
+
+    // std::cout << "WTF " << attn.qkv.weight.rows() << " " << attn.qkv.weight.cols() << " " << std::endl;
+    
     Eigen::MatrixXf QKV = forward_linear(input, attn.qkv);
 
     // Split QKV into Q, K, V; each of shape: (n, n_embd)
@@ -165,28 +214,45 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
     // === Recompute Attention Output for Each Head ===
     // We'll need the softmax outputs and raw scores for backprop.
     std::vector<Eigen::MatrixXf> scores_heads(n_head), A_heads(n_head), O_heads(n_head);
-    const float scale = std::sqrt(static_cast<float>(d));
+    const float scale = 1.0 / std::sqrt(static_cast<float>(d));
     for (int h = 0; h < n_head; ++h) {
+        // std::cout << "Loop # " << h << std::endl;
         // scores = (Q * K^T)/scale  → shape: (n, n)
-        Eigen::MatrixXf scores = (Q_heads[h] * K_heads[h].transpose()) / scale;
+        Eigen::MatrixXf scores = (Q_heads[h] * K_heads[h].transpose()) * scale;
+
+        // std::cout << "causal mask " << std::endl;
         // Apply causal mask: for each token i, force scores(i,j) = -∞ for j > i.
         for (int i = 0; i < n; ++i) {
             for (int j = i + 1; j < n; ++j) {
                 scores(i, j) = -std::numeric_limits<float>::infinity();
             }
         }
+
+        // std::cout << "scores[h]" << std::endl;
         scores_heads[h] = scores;
         // A = softmax(scores) row-wise.
-        A_heads[h] = softmax(scores);
+        A_heads[h] = Eigen::MatrixXf(n, n);
+        for (int i =0 ; i < n; ++i) {
+
+        // std::cout << "soft maxwell " << i << std::endl;
+            A_heads[h].row(i) = softmax(scores.row(i));
+        }
+
+        // std::cout << "about to end " << std::endl;
         // Output for head h: O = A * V, shape: (n, d)
         O_heads[h] = A_heads[h] * V_heads[h];
+
+        // std::cout << "end loop " << h << std::endl;
     }
 
     // === Combine Heads: Concatenate O_heads into O of shape (n, n_embd) ===
     Eigen::MatrixXf O(n, n_embd);
     for (int h = 0; h < n_head; ++h) {
+        // std::cout << "loop nhead o " << h << std::endl;
         O.block(0, h * d, n, d) = O_heads[h];
     }
+
+    // std::cout << "BACKPROP STARTS HERE " << std::endl;
 
     /*
         BACKPROP STARTS HERE
@@ -202,11 +268,17 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
     // Backpropagate through c_proj (assumes forward pass used O as input).
     Eigen::MatrixXf dO = backward_linear(gradient, O, attn.c_proj); // (n, n_embd)
 
+
+    // std::cout << "DONE dO " << std::endl;
+
     // === Split dO into Heads ===
     std::vector<Eigen::MatrixXf> dO_heads(n_head);
     for (int h = 0; h < n_head; ++h) {
         dO_heads[h] = dO.block(0, h * d, n, d);
     }
+
+
+    // std::cout << "DONE SPLIT " << std::endl;
 
     // === Backprop Through Attention per Head ===
     // For each head, we backprop through:
@@ -215,18 +287,33 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
     // Finally, for the scaled dot-product: dQ = (dScores * K)/scale and dK = (dScores^T * Q)/scale.
     std::vector<Eigen::MatrixXf> dQ_heads(n_head), dK_heads(n_head), dV_heads(n_head);
     for (int h = 0; h < n_head; ++h) {
+
+        // std::cout << "dA " << std::endl;
+
         Eigen::MatrixXf dA = dO_heads[h] * V_heads[h].transpose();  // (n, n)
+
+        // std::cout << "dV " << std::endl;
+
         Eigen::MatrixXf dV = A_heads[h].transpose() * dO_heads[h];      // (n, d)
         // Backprop through softmax.
+
+        // std::cout << "dScores " << std::endl;
         Eigen::MatrixXf dScores = softmax_backward(dA, A_heads[h]);       // (n, n)
         // Backprop through the scaled dot-product: scores = (Q * K^T)/scale.
+
+
+            // std::cout << "dq" << std::endl;
         Eigen::MatrixXf dQ = (dScores * K_heads[h]) / scale;              // (n, d)
+
+        // std::cout << "dk " << std::endl;
         Eigen::MatrixXf dK = (dScores.transpose() * Q_heads[h]) / scale;    // (n, d)
 
         dQ_heads[h] = dQ;
         dK_heads[h] = dK;
         dV_heads[h] = dV;
     }
+
+    // std::cout << "BACKPROP POST ATTENTION HEAD  " << std::endl;
 
     // === Concatenate dQ, dK, dV for all heads into dQKV of shape (n, 3*n_embd) ===
     Eigen::MatrixXf dQKV(n, 3 * n_embd);
@@ -235,6 +322,9 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
         dQKV.block(0, n_embd + h * d, n, d) = dK_heads[h];
         dQKV.block(0, 2 * n_embd + h * d, n, d) = dV_heads[h];
     }
+
+
+    // std::cout << " dInput " << std::endl;
 
     // === Backprop Through the QKV Projection ===
     // Pass the concatenated gradient back through the qkv linear layer.
@@ -277,7 +367,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
         // do it yourself (or just know the math like a smart person ig). 
         BlockActivations act;
 
-        auto residual = x;
+        Eigen::MatrixXf residual = x;
 
         x = layer_norm(act.ln1_in = x, block.ln_1);
         x = causal_self_attention(act.attn_in = x, block.attn);
@@ -317,6 +407,33 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
     Eigen::MatrixXf current_gradient(L, model().config().n_embd);
 
+    assert_not_nan(model().wpe());
+    assert_not_nan(model().wte());
+    assert_not_nan(model().ln_f().gamma);
+    assert_not_nan(model().ln_f().beta);
+
+    for (auto &b: model().blocks()) {
+        assert_not_nan(b.attn.qkv.bias);
+        assert_not_nan(b.attn.qkv.weight);
+        
+        assert_not_nan(b.attn.c_proj.bias);
+        assert_not_nan(b.attn.c_proj.weight);
+        assert_not_nan(b.ln_1.gamma);
+        assert_not_nan(b.ln_1.beta);
+        assert_not_nan(b.ln_2.gamma);
+        assert_not_nan(b.ln_2.beta);
+        
+        assert_not_nan(b.mlp.to_up.bias);
+        assert_not_nan(b.mlp.to_up.weight);
+        assert_not_nan(b.mlp.back_down.bias);
+        assert_not_nan(b.mlp.back_down.weight);
+        
+        
+        
+    }
+    
+    
+
     {
         // we apply this to wte deriv
         Eigen::MatrixXf apply_wte_deriv(model().config().n_embd, model().config().vocab_size);
@@ -332,9 +449,14 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
             Eigen::RowVectorXf loss_vec = softmax(
                 x_final.row(i) *
-                model().lm_head().transpose());
+                model().lm_head().transpose(), true);
 
-            loss -= std::log(loss_vec(target));
+            if (!(loss_vec(target) > 0)) {
+                std::cout << "WTF? " << i << " | " << loss_vec(target) << std::endl;
+            }
+            assert(loss_vec(target) > 0);
+
+            loss -= std::log(loss_vec(target)); // TODO: should I do this? this is a hack
 
             // this is just how softmax works
             loss_vec(target) -= 1.0f;
@@ -342,30 +464,65 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
             // Now, vector has to be averaged, before adding to saved_weight_app
             loss_vec /= L;
 
+            // this is still insane
             apply_wte_deriv += x_final.row(i).transpose() * loss_vec; // becomes [e x V vector]. All are scaled down implicitly.
-            current_gradient.row(i) = x_final.row(i) * model().wte(); // (N x V) x (V x e). All are scaled down implicitly too.
+            
+            current_gradient.row(i) = loss_vec * model().wte(); // (N x V) x (V x e). All are scaled down implicitly too.
         }
         loss /= L;
+
+        std::cout << "Loss: " << loss << std::endl;
+
         _model._wte.transpose() += apply_wte_deriv; 
     }
+
+    // std::cout << "GOT PAST THE HARD PART!" << std::endl;
 
     // COMPLETE BULLSHIT SIMPLE LEARNING FOR NOW: Just scale gradients gradually down to 0
     current_gradient *= temp; 
 
     current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, x_final, _model._ln_f);
 
+    assert_not_nan(current_gradient);
+
     for (int bi = static_cast<int>(model().blocks().size()) - 1; bi >= 0; --bi) {
-        const auto& block = model().blocks()[bi];
         const auto& act = acts[bi];
 
+        std::cout << "Block " << bi << " skip layer " << 2 << std::endl;
+
         Eigen::MatrixXf skip_layer = current_gradient; // residual skips 
+
+        // std::cout << " Backward mlp " << std::endl;
+
         current_gradient = Forward_BackwardNaive::backward_mlp(current_gradient, act.mlp_in, _model._h[bi].mlp);
+
+
+    assert_not_nan(current_gradient);
+        // std::cout << " Backward layer norm " << std::endl;
+
         current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, act.ln2_in, _model._h[bi].ln_2);
+
+
+        // std::cout << " add resisaul 2" << std::endl;
+
         current_gradient += skip_layer; // add back the residual
 
+        // std::cout << "Block " << bi << " skip layer " << 1 << std::endl;
+
         skip_layer = current_gradient; // residual skips 
+
+        // std::cout << "Attention computation " << std::endl;
+
         current_gradient = Forward_BackwardNaive::backward_causal_self_attention(current_gradient, act.attn_in, _model._h[bi].attn);
+
+        // std::cout << "backward layer norm" << std::endl;
+
         current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, act.ln1_in, _model._h[bi].ln_1);
+
+    assert_not_nan(current_gradient);
+
+        // std::cout << "Block " << bi << " skip layer " << 2 << std::endl;
+
         current_gradient += skip_layer; // add back the residual
     }
 
@@ -443,10 +600,12 @@ Eigen::MatrixXf Forward_BackwardNaive::layer_norm(Eigen::MatrixXf x, const Layer
     return x;
 }
 
+namespace{ 
 float _gelu(float x) {
     const float GELU_SCALE = std::sqrt(2.0f / static_cast<float>(M_PI));
     float cube = 0.044715f * x * x * x;
     return 0.5f * x * (1.0f + tanhf(GELU_SCALE * (x + cube)));
+}
 }
 
 Eigen::MatrixXf Forward_BackwardNaive::gelu(Eigen::MatrixXf x) { return x.unaryExpr(&_gelu); }

@@ -14,8 +14,13 @@ public:
 
     // Load all weights from directory
     void load_weights(const std::filesystem::path& dir_path);
-
+    
     void init_data_random();
+
+
+    // PLEASE PLEASE PLEASE PLEASE CALL THIS AFTER INIT
+    void verifySizes();
+    
 
     // Getters for different components
     const Eigen::MatrixXf& wte() const { return _wte; }
@@ -24,7 +29,7 @@ public:
     const LayerNormWeights& ln_f() const { return _ln_f; }
 
     // weight tying
-    const Eigen::MatrixXf& lm_head() const {return _wte.transpose(); }
+    const Eigen::MatrixXf& lm_head() const {return _wte; } // HAVE to transpose this 
 
     const GPTConfig& config() const {return _config; }
 
@@ -46,4 +51,5 @@ private:
     void load_embeddings(const std::filesystem::path& dir_path);
     void load_transformer_block(int layer_idx, const std::filesystem::path& dir_path);
     void load_final_layer_norm(const std::filesystem::path& dir_path);
+
 };

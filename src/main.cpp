@@ -2,6 +2,8 @@
 #include "reference/flash_attention_1_forward.hpp"
 #include "reference/forward_naive.hpp"
 
+#include "reference/forward_backward_naive.hpp"
+
 #include <iostream>
 #include <chrono>
 #include <iomanip>
@@ -60,11 +62,6 @@ std::vector<int> one_by_one(T& forwarder, std::vector<int> tokens ) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_weights_dir>\n";
-        return 1;
-    }
-
     int mode; 
     std::cout << "type 0 for pre-loaded weight inference, type 1 for training " << std::endl;
     std::cin >> mode;
@@ -75,12 +72,35 @@ int main(int argc, char** argv) {
         ModelWeights model(config);
         model.init_data_random();
 
+        model.verifySizes();
+
+        std::vector<int> tokens = {43, 29625, 220, 2419, 388, 288, 45621, 1650, 716, 316, 11, 369, 8831, 316, 333, 31659, 271, 2259, 1288, 270, 11, 10081, 466, 304, 3754, 4666, 10042, 753, 312, 312, 2797, 3384, 2248, 382, };
+        tokens.push_back(config.EOT_TOKEN);
+        // 2123, 288, 349, 382, 2153, 2616, 435, 1557, 64, 13, 7273, 551, 320, 512, 10356, 8710, 1789, 11, 627, 271, 18216, 81, 463, 4208, 3780, 334, 297, 321, 1073, 4827, 271, 299, 23267, 3384, 435, 1557, 541, 409, 304, 64, 13088, 78, 4937, 265, 13, 10343, 271, 257, 1133, 4173, 495, 288, 45621, 287, 1128, 260, 258, 681, 270, 287, 2322, 37623, 378, 11555, 270, 1658, 325, 269, 359, 388, 288, 349, 382, 304, 84, 31497, 5375, 9242, 64, 1582, 72, 2541, 13, 18181, 23365, 264, 600, 1609, 64, 721, 265, 6508, 312, 265, 265, 1729, 386, 738, 11, 264, 2797, 287, 10845, 8957, 45567, 1163, 544, 748, 263, 2797, 285, 692, 270, 2355, 4686, 1556, 4827, 388, 13, 50256};
         
+        Forward_BackwardNaive trainer(model);
+        int iter = 0;
+        for (float temp = 1.0; temp > 0; temp -= 0.1) {
+            std::cout << "ITeration " << iter++ << " : " << temp << std::endl;
+            trainer.backward(tokens, temp);
+        }
+
+        KVCachingForwarder forward(model);
+        std::vector<int> tokens2; for (int i = 0; i < 5; ++i) tokens2.push_back(tokens[i]); // fill first 5 for free
+        
+        auto result = forward.forward_until(tokens2, tokens.size());
+        std::cout << "[";
+        for (auto x: result) std::cout << x << ", ";
+        std::cout << "]\n";
 
         return 0;
     } 
 
     try {
+        if (argc != 2) {
+            std::cerr << "Usage: " << argv[0] << " <path_to_weights_dir>\n";
+            return 1;
+        }
         // Initialize config with default values
         GPTConfig config;
         // Create model weights instance
@@ -88,6 +108,8 @@ int main(int argc, char** argv) {
         // Load weights
         std::cout << "Loading weights from: " << argv[1] << std::endl;
         weights.load_weights(argv[1]);
+
+        weights.verifySizes();
         std::cout << "All weights loaded successfully!\n";
 
 // lol this will come later 

@@ -13,7 +13,7 @@ INCLUDES = -I./include -I/usr/local/include/eigen3 -I/usr/local/cuda/include
 CXXLIB = -lcnpy -lz
 # For release builds, linking with OpenBLAS might be needed:
 ifeq ($(BUILD_TYPE), debug)
-    CXXFLAGS += -O0 -DDEBUG -g 
+    CXXFLAGS += -O0 -DDEBUG -DEIGEN_DEBUG -g 
 	NVCCFLAGS += -O0 -DDEBUG -g 
 else
     CXXFLAGS += -O3 -DRELEASE -DEIGEN_USE_BLAS -mavx -mfma
