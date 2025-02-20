@@ -1,3 +1,18 @@
+/*
+    This shit is so doomed dude
+
+    Like I'm very sure my math and interpretations are correct.
+    
+    All you need is actual_value(input), and gradient(output) to recompute all intermediaries, and 
+    you can keep breaking down this logic over and over. 
+    
+    but minus signs plus signs everywhere and etc.
+
+    I guess this is why people fall back on ML frameworks 
+
+*/
+
+
 #include "reference/forward_backward_naive.hpp"
 #include <cmath>
 #include <cassert>
@@ -7,13 +22,24 @@
 #include <iostream>
 
 
+bool is_normal(float input) {
+    if (input != input) return false;
+
+    if (input == -std::numeric_limits<float>::infinity()) return false;
+    if (input == std::numeric_limits<float>::infinity()) return false;
+    return true;
+}
 
 template<typename T>
+
+// ALSO checks that we didn't hit inf or -inf or something
+
+
 bool assert_not_nan(T container) {
 // #ifdef DEBUG
     for (int i = 0; i < container.rows(); ++i) {
         for (int j = 0; j < container.cols(); ++j) {
-            if (container(i, j) != container(i, j)) return false;
+            if (!is_normal(container(i, j))) return false;
         }
     }
 // #endif
@@ -32,7 +58,7 @@ Eigen::RowVectorXf softmax(const Eigen::RowVectorXf& logits, bool debug = false)
 
     Eigen::RowVectorXf exp_logits = (logits.array() - logits.maxCoeff()).exp();  // for numerical stability
 
-    // assert(exp_logits.sum() > 0);
+    assert(exp_logits.sum() > 0);
 
     return exp_logits / exp_logits.sum();
 }
@@ -74,10 +100,10 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_layer_norm(const Eigen::MatrixXf
                         (x.row(i).array() - mean) * dvar * (2.0 / n) +
                         dmean / n;
 
-
-        assert(dvar == dvar);
-        assert(dmean == dmean);
-        assert_not_nan(result.row(i));
+        assert(is_normal(dvar));
+        assert(is_normal(dmean));
+        
+        assert ( assert_not_nan(result.row(i)) );
     }
 
     // Update layer norm parameters gamma and beta
@@ -124,8 +150,9 @@ Eigen::MatrixXf backward_linear(const Eigen::MatrixXf& gradient, const Eigen::Ma
     }
 
     // Update weights & bias (simulating SGD step, though you'd typically scale this in real training)
-    linear.weight += weight_grad;
-    linear.bias += bias_grad;
+    // gradient descent
+    linear.weight -= weight_grad;
+    linear.bias -= bias_grad;
 
     return result; // Pass gradient to previous layer
 }
@@ -144,7 +171,7 @@ float _gelu_derivative(float x) {
     float res = 
     term1 + term2;
 
-    assert(res==res); // NOT NAN
+    assert(is_normal(res));
 
     return res;
 }   
@@ -176,7 +203,7 @@ Eigen::MatrixXf softmax_backward(const Eigen::MatrixXf& dA, const Eigen::MatrixX
         float dot = (A.row(i).cwiseProduct(dA.row(i))).sum();
         dS.row(i) = A.row(i).cwiseProduct(dA.row(i) - Eigen::RowVectorXf::Constant(A.cols(), dot));
     }
-    assert_not_nan(dS);
+    assert( assert_not_nan(dS) );
     return dS;
 }
 }
@@ -219,6 +246,10 @@ Eigen::MatrixXf Forward_BackwardNaive::backward_causal_self_attention(
     // We'll need the softmax outputs and raw scores for backprop.
     std::vector<Eigen::MatrixXf> scores_heads(n_head), A_heads(n_head), O_heads(n_head);
     const float scale = 1.0 / std::sqrt(static_cast<float>(d));
+
+
+    assert(d == 64);
+
     for (int h = 0; h < n_head; ++h) {
         // std::cout << "Loop # " << h << std::endl;
         // scores = (Q * K^T)/scale  → shape: (n, n)
@@ -344,6 +375,32 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
     assert(tokens.size() >= 2 && "Need at least two tokens for training.");
     int L = tokens.size() - 1; // number of predictions
 
+    /*
+        assert that model weights no fucked
+    */
+
+    assert( assert_not_nan(model().wpe()) );
+    assert( assert_not_nan(model().wte()) );
+    assert( assert_not_nan(model().ln_f().gamma) );
+    assert( assert_not_nan(model().ln_f().beta) );
+
+    for (auto &b: model().blocks()) {
+        assert( assert_not_nan(b.attn.qkv.bias) );
+        assert( assert_not_nan(b.attn.qkv.weight) );
+        
+        assert( assert_not_nan(b.attn.c_proj.bias) );
+        assert( assert_not_nan(b.attn.c_proj.weight) );
+        assert( assert_not_nan(b.ln_1.gamma) );
+        assert( assert_not_nan(b.ln_1.beta) );
+        assert( assert_not_nan(b.ln_2.gamma) );
+        assert( assert_not_nan(b.ln_2.beta) );
+        
+        assert( assert_not_nan(b.mlp.to_up.bias) );
+        assert( assert_not_nan(b.mlp.to_up.weight) );
+        assert( assert_not_nan(b.mlp.back_down.bias) );
+        assert( assert_not_nan(b.mlp.back_down.weight) );
+    }
+
     // -------------------------------
     // 1. Forward Pass (Training Mode)
     // -------------------------------
@@ -374,30 +431,42 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
         Eigen::MatrixXf residual = x;
 
         x = layer_norm(act.ln1_in = x, block.ln_1);
+
+        assert(assert_not_nan(x) && "check 1");
+
         x = causal_self_attention(act.attn_in = x, block.attn);
+
+        assert(assert_not_nan(x) && "check 2");
+        
 
         x += residual; 
 
         residual = x;
+        assert(assert_not_nan(x) && "check 3");
+        
 
         x = layer_norm(act.ln2_in = x, block.ln_2);
+        assert(assert_not_nan(x) && "check 4");
+        
         x = mlp(act.mlp_in = x, block.mlp);
+        assert(assert_not_nan(x) && "check 5");
+        
 
         x += residual;
         acts.push_back(act);
 
-        assert_not_nan(act.ln1_in);
-        assert_not_nan(act.attn_in);
-        assert_not_nan(act.ln2_in);
-        assert_not_nan(act.mlp_in);
+        assert( assert_not_nan(act.ln1_in) );
+        assert( assert_not_nan(act.attn_in) );
+        assert( assert_not_nan(act.ln2_in) );
+        assert( assert_not_nan(act.mlp_in) );
 
-        assert_not_nan(x);
+        assert( assert_not_nan(x) );
     }
 
     // Final layer norm.
     Eigen::MatrixXf x_final = layer_norm(x, model().ln_f());
 
-    assert_not_nan(x_final);
+    assert( assert_not_nan(x_final) );
 
     float loss = 0.0f;
 
@@ -422,30 +491,6 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
     Eigen::MatrixXf current_gradient(L, model().config().n_embd);
     current_gradient.setZero();
 
-    assert_not_nan(model().wpe());
-    assert_not_nan(model().wte());
-    assert_not_nan(model().ln_f().gamma);
-    assert_not_nan(model().ln_f().beta);
-
-    for (auto &b: model().blocks()) {
-        assert_not_nan(b.attn.qkv.bias);
-        assert_not_nan(b.attn.qkv.weight);
-        
-        assert_not_nan(b.attn.c_proj.bias);
-        assert_not_nan(b.attn.c_proj.weight);
-        assert_not_nan(b.ln_1.gamma);
-        assert_not_nan(b.ln_1.beta);
-        assert_not_nan(b.ln_2.gamma);
-        assert_not_nan(b.ln_2.beta);
-        
-        assert_not_nan(b.mlp.to_up.bias);
-        assert_not_nan(b.mlp.to_up.weight);
-        assert_not_nan(b.mlp.back_down.bias);
-        assert_not_nan(b.mlp.back_down.weight);
-        
-        
-        
-    }
     
     
 
@@ -467,7 +512,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
             Eigen::RowVectorXf loss_vec = softmax(
                 x_final.row(i) *
-                model().lm_head().transpose(), true);
+                model().lm_head().transpose());
 
             const float eps = 1e-9;
             if (!(loss_vec(target) + eps > 0)) {
@@ -492,7 +537,11 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
         std::cout << "Loss: " << loss << std::endl;
 
-        _model._wte.transpose() += apply_wte_deriv; 
+        // Remember to subtract in all gradient applications, since it's gradient DESCENT not ASCENT. 
+        // But wecan't just straight up multiply gradient by -1, thats not correct :P. 
+        // Just replace all the plusses with minuses (put the fries in the bag)
+
+        _model._wte.transpose() -= apply_wte_deriv * temp; 
     }
 
     // std::cout << "GOT PAST THE HARD PART!" << std::endl;
@@ -502,12 +551,12 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
     current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, x_final, _model._ln_f);
 
-    assert_not_nan(current_gradient);
+    assert( assert_not_nan(current_gradient) );
 
     for (int bi = static_cast<int>(model().blocks().size()) - 1; bi >= 0; --bi) {
         const auto& act = acts[bi];
 
-        std::cout << "Block " << bi << " skip layer " << 2 << std::endl;
+        // std::cout << "Block " << bi << " skip layer " << 2 << std::endl;
 
         Eigen::MatrixXf skip_layer = current_gradient; // residual skips 
 
@@ -516,7 +565,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
         current_gradient = Forward_BackwardNaive::backward_mlp(current_gradient, act.mlp_in, _model._h[bi].mlp);
 
 
-    assert_not_nan(current_gradient);
+    assert( assert_not_nan(current_gradient) );
         // std::cout << " Backward layer norm " << std::endl;
 
         current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, act.ln2_in, _model._h[bi].ln_2);
@@ -538,7 +587,7 @@ void Forward_BackwardNaive::backward(std::vector<int> tokens, float temp) {
 
         current_gradient = Forward_BackwardNaive::backward_layer_norm(current_gradient, act.ln1_in, _model._h[bi].ln_1);
 
-    assert_not_nan(current_gradient);
+    assert( assert_not_nan(current_gradient) );
 
         // std::cout << "Block " << bi << " skip layer " << 2 << std::endl;
 
@@ -567,6 +616,11 @@ Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, 
     assert(C % n_head == 0);
     int head_dim = C / n_head; // Each head gets C/n_head features
 
+    assert_not_nan(x);
+    assert_not_nan(attn.qkv.weight);
+    assert_not_nan(attn.qkv.bias);
+    
+
     Eigen::MatrixXf qkv = forward_linear(x, attn.qkv);
 
     Eigen::MatrixXf q = qkv.leftCols(C);
@@ -580,10 +634,23 @@ Eigen::MatrixXf Forward_BackwardNaive::causal_self_attention(Eigen::MatrixXf x, 
         Eigen::MatrixXf k_h = k.middleCols(h * head_dim, head_dim);
         Eigen::MatrixXf v_h = v.middleCols(h * head_dim, head_dim);
 
+        assert(assert_not_nan(q_h));
+        assert(assert_not_nan(k_h));
+        assert(assert_not_nan(v_h));
+
+        
+        
+
         Eigen::MatrixXf att_h = q_h * k_h.transpose();
+
+        assert(assert_not_nan(att_h));
+        
+        assert(head_dim == 64);
 
         float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
         att_h *= scale;
+
+        assert(assert_not_nan(att_h));
 
         for (int i = 0; i < T; i++) {
             for (int j = i + 1; j < T; j++) {
@@ -623,7 +690,10 @@ namespace{
 float _gelu(float x) {
     const float GELU_SCALE = std::sqrt(2.0f / static_cast<float>(M_PI));
     float cube = 0.044715f * x * x * x;
-    return 0.5f * x * (1.0f + tanhf(GELU_SCALE * (x + cube)));
+    float res = 0.5f * x * (1.0f + tanhf(GELU_SCALE * (x + cube)));
+
+    assert(is_normal(res));
+    return res;
 }
 }
 
